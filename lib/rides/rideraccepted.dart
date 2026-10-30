@@ -16,25 +16,7 @@ class _RiderAcceptedState extends State<RiderAccepted> {
 
   bool isMenuOpen = false;
 
-  @override
-  void initState() {
-    super.initState();
 
-    // ============================================================
-    // TESTING ONLY — AUTO NAVIGATE AFTER 5 SECONDS
-    // ============================================================
-
-    Future.delayed(const Duration(seconds: 5), () {
-      if (!mounted) return;
-
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => const ActiveRideScreen(),
-        ),
-      );
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -135,7 +117,7 @@ class _RiderAcceptedState extends State<RiderAccepted> {
 
                             icon: Icon(
                               Icons.menu,
-                              size: isDesktop ? 34.0 : 34.0,
+                              size: isDesktop ? 30 : 28,
                               color: Colors.black,
                             ),
                           ),
@@ -164,7 +146,7 @@ class _RiderAcceptedState extends State<RiderAccepted> {
 
                           child: Icon(
                             Icons.notifications_none,
-                            size: isDesktop ? 30.0 : 30.0,
+                            size: isDesktop ? 28 : 26,
                             color: Colors.black,
                           ),
                         ),

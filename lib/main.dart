@@ -7,7 +7,7 @@ import 'screens/welcome_screen.dart';
 import 'screens/splash_screen.dart';
 import 'screens/createaccount_screen.dart';
 import 'screens/registration.dart';
-import '../rides/rideraccepted.dart';
+import '../rides/ridereview.dart';
 import '../rides/ridecompleted.dart';
 import '../rides/pickupmaplocation.dart';
 import 'screens/createaccount_screen.dart';

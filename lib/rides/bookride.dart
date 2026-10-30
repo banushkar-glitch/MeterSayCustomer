@@ -145,10 +145,10 @@ class _BookRideScreenState extends State<BookRideScreen> {
                             Icons.menu,
                             color: const Color(0xFF1D1B20),
                             size: isDesktop
-                                ? 34
+                                ? 30
                                 : isTablet
                                 ? 37
-                                : 34,
+                                : 28,
                           ),
                         ),
                       ),
@@ -167,7 +167,7 @@ class _BookRideScreenState extends State<BookRideScreen> {
                         style: TextStyle(
                           fontFamily: "Geologica",
                           fontSize: titleSize,
-                          fontWeight: FontWeight.w400,
+                          fontWeight: FontWeight.w500,
                           color: Colors.black,
                         ),
                       ),
@@ -201,10 +201,10 @@ class _BookRideScreenState extends State<BookRideScreen> {
                             Icons.notifications_none,
                             color: const Color(0xFF1D1B20),
                             size: isDesktop
-                                ? 30
+                                ? 28
                                 : isTablet
                                 ? 34
-                                : 30,
+                                : 26,
                           ),
                         ),
                       ),
@@ -476,7 +476,7 @@ class _BookRideScreenState extends State<BookRideScreen> {
                                           ? 30
                                           : isTablet
                                           ? 24
-                                          : 18,
+                                          : 30,
                                     ),
 
                                     // ==================================================

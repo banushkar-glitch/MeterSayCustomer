@@ -29,21 +29,7 @@ class _LocatingDriverScreenState
   // ============================================================
   // BUILD
   // ============================================================
-  @override
-  void initState() {
-    super.initState();
 
-    Future.delayed(const Duration(seconds: 5), () {
-      if (!mounted) return;
-
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => const RiderAccepted(),
-        ),
-      );
-    });
-  }
   @override
   Widget build(BuildContext context) {
     final Size screenSize = MediaQuery
@@ -225,7 +211,7 @@ class _LocatingDriverScreenState
                     Icons.menu,
                     color: const Color(0xFF1D1B20),
                     size: isDesktop
-                        ? 34 : 34,
+                        ? 30 : 28,
                   ),
                 ),
               ),
@@ -244,7 +230,7 @@ class _LocatingDriverScreenState
                 style: TextStyle(
                   fontFamily: "Geologica",
                   fontSize: titleSize,
-                  fontWeight: FontWeight.w400,
+                  fontWeight: FontWeight.w500,
                   color: Colors.black,
                 ),
               ),
@@ -275,7 +261,7 @@ class _LocatingDriverScreenState
                     Icons.notifications_none,
                     color: const Color(0xFF1D1B20),
                     size: isDesktop
-                        ? 30 : 30,
+                        ? 28 : 26,
                   ),
                 ),
               ),
@@ -644,7 +630,7 @@ class _LocatingDriverScreenState
         },
 
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF3C3A3A),
+          backgroundColor: Colors.red,
           foregroundColor: Colors.white,
           elevation: 0,
           padding: EdgeInsets.zero,
@@ -661,8 +647,8 @@ class _LocatingDriverScreenState
           style: TextStyle(
             fontFamily: 'Inria Serif',
             fontSize: textSize,
-            fontWeight: FontWeight.w400,
-            color: Colors.red,
+            fontWeight: FontWeight.w500,
+            color: Colors.white,
           ),
         ),
       ),

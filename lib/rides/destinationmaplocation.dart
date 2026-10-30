@@ -165,10 +165,10 @@ class _DestinationMapScreenState
                                 Icons.menu,
                                 color: const Color(0xFF1D1B20),
                                 size: isDesktop
-                                    ? 34
+                                    ? 30
                                     : isTablet
                                     ? 37
-                                    : 34,
+                                    : 28,
                               ),
                             ),
                           ),
@@ -187,7 +187,7 @@ class _DestinationMapScreenState
                             style: TextStyle(
                               fontFamily: "Geologica",
                               fontSize: titleSize,
-                              fontWeight: FontWeight.w400,
+                              fontWeight: FontWeight.w500,
                               color: Colors.black,
                             ),
                           ),
@@ -221,10 +221,10 @@ class _DestinationMapScreenState
                                 Icons.notifications_none,
                                 color: const Color(0xFF1D1B20),
                                 size: isDesktop
-                                    ? 30
+                                    ? 28
                                     : isTablet
                                     ? 34
-                                    : 30,
+                                    : 26,
                               ),
                             ),
                           ),
@@ -273,45 +273,6 @@ class _DestinationMapScreenState
 // ==================================================
 // FLOATING BACK BUTTON
 // ==================================================
-
-                      Positioned(
-                        top: 175,
-                        left: 0,
-                        right: 0,
-
-                        child: Center(
-                          child: SizedBox(
-                            width: contentMaxWidth,
-
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-
-                              child: Padding(
-                                padding: EdgeInsets.only(
-                                  left: isDesktop ? 15 : 20,
-                                ),
-
-                                child: Material(
-                                  color: Colors.white,
-                                  elevation: 2,
-                                  shape: const CircleBorder(),
-
-                                  child: IconButton(
-                                    icon: Icon(
-                                      Icons.arrow_back,
-                                      size: isDesktop ? 28 : 30,
-                                      color: Colors.black,
-                                    ),
-                                    onPressed: () {
-                                      Navigator.pop(context);
-                                    },
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
 
                       // ==================================================
                       // DESTINATION PANEL

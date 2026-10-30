@@ -12,21 +12,7 @@ class RideReviewScreen extends StatefulWidget {
 class _RideReviewScreenState
     extends State<RideReviewScreen> {
 
-  @override
-  void initState() {
-    super.initState();
 
-    Future.delayed(const Duration(seconds: 2), () {
-      if (!mounted) return;
-
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => const MappingScreen(),
-        ),
-      );
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -120,7 +106,7 @@ class _RideReviewScreenState
 
                             color: Colors.black,
 
-                            size: isDesktop ? 34 : 34,
+                            size: isDesktop ? 30 : 28,
 
                           ),
 
@@ -138,7 +124,7 @@ class _RideReviewScreenState
 
                                 fontSize: titleSize,
 
-                                fontWeight: FontWeight.w400,
+                                fontWeight: FontWeight.w500,
 
                                 color: Colors.black,
 
@@ -164,7 +150,7 @@ class _RideReviewScreenState
 
                             color: Colors.black,
 
-                            size: isDesktop ? 30 : 30,
+                            size: isDesktop ? 28 : 26,
 
                           ),
 

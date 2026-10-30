@@ -13,21 +13,7 @@ class _ActiveRideScreenState extends State<ActiveRideScreen> {
 
   bool isMenuOpen = false;
 
-  @override
-  void initState() {
-    super.initState();
 
-    Future.delayed(const Duration(seconds: 5), () {
-      if (!mounted) return;
-
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => const RideCompletedScreen(),
-        ),
-      );
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -97,7 +83,7 @@ class _ActiveRideScreenState extends State<ActiveRideScreen> {
 
                           icon: Icon(
                             Icons.menu,
-                            size: isDesktop ? 34.0 : 34.0,
+                            size: isDesktop ? 30 : 28,
                             color: Colors.black,
                           ),
                         ),
@@ -120,7 +106,7 @@ class _ActiveRideScreenState extends State<ActiveRideScreen> {
                                 ? 22
                                 : 20,
 
-                            fontWeight: FontWeight.w400,
+                            fontWeight: FontWeight.w500,
 
                             letterSpacing: -0.02,
 
@@ -142,10 +128,10 @@ class _ActiveRideScreenState extends State<ActiveRideScreen> {
                           Icons.notifications_none,
 
                           size: isDesktop
-                              ? 42
+                              ? 28
                               : isTablet
                               ? 40
-                              : 40,
+                              : 26,
 
                           color: const Color(0xFF1E1E1E),
                         ),

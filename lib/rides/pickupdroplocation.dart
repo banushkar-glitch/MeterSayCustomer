@@ -174,10 +174,10 @@ class _PickupDropLocationState extends State<PickupDropLocation> {
                                 Icons.menu,
                                 color: const Color(0xFF1D1B20),
                                 size: isDesktop
-                                    ? 34
+                                    ? 30
                                     : isTablet
                                     ? 37
-                                    : 34,
+                                    : 28,
                               ),
                             ),
                           ),
@@ -196,7 +196,7 @@ class _PickupDropLocationState extends State<PickupDropLocation> {
                             style: TextStyle(
                               fontFamily: "Geologica",
                               fontSize: titleSize,
-                              fontWeight: FontWeight.w400,
+                              fontWeight: FontWeight.w500,
                               color: Colors.black,
                             ),
                           ),
@@ -230,10 +230,10 @@ class _PickupDropLocationState extends State<PickupDropLocation> {
                                 Icons.notifications_none,
                                 color: const Color(0xFF1D1B20),
                                 size: isDesktop
-                                    ? 30
+                                    ? 28
                                     : isTablet
                                     ? 34
-                                    : 30,
+                                    : 26,
                               ),
                             ),
                           ),
@@ -247,6 +247,9 @@ class _PickupDropLocationState extends State<PickupDropLocation> {
                 // ==================================================
                 // BODY
                 // ==================================================
+                SizedBox(
+                  height: isDesktop ? 25 : 5,
+                ),
 
                 Expanded(
                   child: SingleChildScrollView(
@@ -274,7 +277,7 @@ class _PickupDropLocationState extends State<PickupDropLocation> {
                             // ==================================================
 
                             SizedBox(
-                              height: isDesktop ? 90 : 70,
+                              height: isDesktop ? 90 : 10,
 
                               child: Stack(
                                 alignment: Alignment.center,
@@ -282,52 +285,10 @@ class _PickupDropLocationState extends State<PickupDropLocation> {
                                 children: [
 
                                   // Back button
-                                  Align(
-                                    alignment: Alignment.centerLeft,
 
-                                    child: Material(
-                                      color: const Color(0xFFD9D9D9),
-                                      shape: const CircleBorder(),
-
-                                      child: InkWell(
-                                        customBorder: const CircleBorder(),
-
-                                        onTap: () {
-                                          Navigator.pop(context);
-                                        },
-
-                                        child: SizedBox(
-                                          width: isDesktop ? 46 : 46,
-                                          height: isDesktop ? 46 : 46,
-
-                                          child: Icon(
-                                            Icons.arrow_back,
-                                            color: Colors.black,
-                                            size: isDesktop ? 34 : 34,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
 
                                   // Pickup title
-                                  Center(
-                                    child: Text(
-                                      isPickupActive == null
-                                          ? ""
-                                          : isPickupActive == true
-                                          ? "Pickup"
-                                          : "Drop",
 
-                                      style: TextStyle(
-                                        fontFamily: "InriaSerif",
-                                        fontSize: titleSize,
-                                        fontWeight: FontWeight.w400,
-                                        letterSpacing: 1.2,
-                                        color: Colors.black,
-                                      ),
-                                    ),
-                                  ),
                                 ],
                               ),
                             ),

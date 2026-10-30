@@ -277,7 +277,7 @@ class _MappingScreenState extends State<MappingScreen> {
                     ? 20
                     : 20,
 
-                fontWeight: FontWeight.w400,
+                fontWeight: FontWeight.w500,
 
                 color: Colors.black,
               ),
@@ -289,7 +289,7 @@ class _MappingScreenState extends State<MappingScreen> {
                   ? 30
                   : isTablet
                   ? 25
-                  : 30,
+                  : 28,
 
               child: GestureDetector(
                 onTap: () {
@@ -301,10 +301,10 @@ class _MappingScreenState extends State<MappingScreen> {
                 child: Icon(
                   Icons.menu,
                   size: isDesktop
-                      ? 34
+                      ? 28
                       : isTablet
                       ? 32
-                      : 34,
+                      : 26,
 
                   color: const Color(0xFF1E1E1E),
                 ),
@@ -321,10 +321,10 @@ class _MappingScreenState extends State<MappingScreen> {
               child: Icon(
                 Icons.notifications_none,
                 size: isDesktop
-                    ? 34
+                    ? 28
                     : isTablet
                     ? 32
-                    : 34,
+                    : 26,
 
                 color: const Color(0xFF1E1E1E),
               ),

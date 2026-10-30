@@ -188,7 +188,7 @@ class _OtpScreenState extends State<OtpScreen> {
 
                             color: Colors.black,
 
-                            size: isDesktop ? 30 : 28,
+                            size: isDesktop ? 28 : 26,
 
                           ),
 

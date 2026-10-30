@@ -124,10 +124,10 @@ class _RideCompletedScreenState
                             Icons.menu,
 
                             size: isDesktop
-                                ? 34
+                                ? 30
                                 : isTablet
                                 ? 32
-                                : 34,
+                                : 28,
 
                             color: const Color(0xFF1E1E1E),
                           ),
@@ -154,7 +154,7 @@ class _RideCompletedScreenState
                                     : 20,
 
                                 fontWeight:
-                                FontWeight.w400,
+                                FontWeight.w500,
 
                                 height: 1.4,
 
@@ -178,10 +178,10 @@ class _RideCompletedScreenState
                             Icons.notifications_none,
 
                             size: isDesktop
-                                ? 40
+                                ? 28
                                 : isTablet
                                 ? 38
-                                : 40,
+                                : 26,
 
                             color: const Color(0xFF1E1E1E),
                           ),

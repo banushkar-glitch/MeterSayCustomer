@@ -16,5 +16,11 @@ public interface RideRepository extends JpaRepository<Ride, Long> {
     Optional<Ride> findFirstByCustomerAndStatusInOrderByCreatedAtDesc(User customer, List<RideStatus> statuses);
 
     Optional<Ride> findByIdAndCustomer(Long id, User customer);
+
+    List<Ride> findByStatusOrderByCreatedAtDesc(RideStatus status);
+
+    List<Ride> findAllByOrderByCreatedAtDesc();
+
+    long countByStatus(RideStatus status);
 }
 

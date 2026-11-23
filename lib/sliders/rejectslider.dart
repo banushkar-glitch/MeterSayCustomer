@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:metersay_app/rides/mapscreen.dart';
+import 'package:metersay_app/services/ride_service.dart';
 
 class CancelRideSheet {
   // ============================================================
@@ -6,8 +8,10 @@ class CancelRideSheet {
   // ============================================================
 
   static Future<void> show(
-      BuildContext context,
-      ) {
+      BuildContext context, {
+      int? rideId,
+      VoidCallback? onCancelled,
+      }) {
     // ============================================================
     // SCREEN WIDTH
     // ============================================================
@@ -71,7 +75,10 @@ class CancelRideSheet {
           child: SizedBox(
             width: sheetWidth,
 
-            child: const _CancelRideBottomSheet(),
+            child: _CancelRideBottomSheet(
+              rideId: rideId,
+              onCancelled: onCancelled,
+            ),
           ),
         );
       },
@@ -85,7 +92,13 @@ class CancelRideSheet {
 // ================================================================
 
 class _CancelRideBottomSheet extends StatefulWidget {
-  const _CancelRideBottomSheet();
+  final int? rideId;
+  final VoidCallback? onCancelled;
+
+  const _CancelRideBottomSheet({
+    this.rideId,
+    this.onCancelled,
+  });
 
   @override
   State<_CancelRideBottomSheet> createState() =>
@@ -101,6 +114,8 @@ class _CancelRideBottomSheetState
     extends State<_CancelRideBottomSheet> {
 
   String? selectedReason;
+  bool _isSubmitting = false;
+  final RideService _rideService = RideService();
 
   @override
   Widget build(BuildContext context) {
@@ -462,81 +477,96 @@ class _CancelRideBottomSheetState
                         .clamp(44.0, 50.0),
 
                     child: ElevatedButton(
-                      onPressed: () {
+                      onPressed: _isSubmitting
+                          ? null
+                          : () async {
+                              // CHECK WHETHER A REASON IS SELECTED
+                              if (selectedReason == null) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Please select a reason'),
+                                  ),
+                                );
+                                return;
+                              }
 
-                        // ==================================================
-                        // CHECK WHETHER A REASON IS SELECTED
-                        // ==================================================
+                              setState(() {
+                                _isSubmitting = true;
+                              });
 
-                        if (selectedReason == null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Please select a reason',
-                              ),
-                            ),
-                          );
+                              final String reason = selectedReason!;
+                              debugPrint('Cancelling ride with reason: $reason');
 
-                          return;
-                        }
+                              // Call backend cancellation API to cancel and save reason in PostgreSQL database
+                              try {
+                                int? targetRideId = widget.rideId;
+                                if (targetRideId == null) {
+                                  final active = await _rideService.getActiveRide();
+                                  if (active['success'] == true && active['hasActiveRide'] == true) {
+                                    final id = active['data']['rideId'];
+                                    if (id != null) {
+                                      targetRideId = id is int ? id : int.tryParse(id.toString());
+                                    }
+                                  }
+                                }
 
-                        // ==================================================
-                        // SELECTED REASON
-                        // ==================================================
+                                if (targetRideId != null) {
+                                  await _rideService.cancelRide(targetRideId, reason: reason);
+                                }
+                              } catch (e) {
+                                debugPrint('Error cancelling ride: $e');
+                              }
 
-                        final String reason = selectedReason!;
+                              if (!mounted) return;
 
-                        // ==================================================
-                        // API PLACEHOLDER
-                        // ==================================================
+                              Navigator.of(context).pop();
 
-                        debugPrint(
-                          'Selected rejection reason: $reason',
-                        );
+                              widget.onCancelled?.call();
 
-                        // ==================================================
-                        // CLOSE SHEET
-                        // ==================================================
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Ride cancelled: $reason'),
+                                  backgroundColor: Colors.black87,
+                                ),
+                              );
 
-                        Navigator.of(context).pop();
-
-                        // ==================================================
-                        // NAVIGATION WILL COME HERE AFTER API
-                        // ==================================================
-                      },
-
+                              Navigator.pushAndRemoveUntil(
+                                context,
+                                MaterialPageRoute(builder: (context) => const MappingScreen()),
+                                (route) => false,
+                              );
+                            },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFFF3B30),
-
                         foregroundColor: Colors.white,
-
                         elevation: 1,
-
                         padding: EdgeInsets.zero,
-
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
                         ),
                       ),
-
-                      child: Text(
-                        'Submit',
-
-                        style: TextStyle(
-                          fontFamily: 'Inter',
-
-                          fontSize: isDesktop
-                              ? 15.0
-                              : isTablet
-                              ? 17.0
-                              : (screenWidth * 0.042)
-                              .clamp(15.0, 18.0),
-
-                          fontWeight: FontWeight.w600,
-
-                          color: Colors.white,
-                        ),
-                      ),
+                      child: _isSubmitting
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : Text(
+                              'Submit',
+                              style: TextStyle(
+                                fontFamily: 'Inter',
+                                fontSize: isDesktop
+                                    ? 15.0
+                                    : isTablet
+                                        ? 17.0
+                                        : (screenWidth * 0.042).clamp(15.0, 18.0),
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
                     ),
                   ),
 

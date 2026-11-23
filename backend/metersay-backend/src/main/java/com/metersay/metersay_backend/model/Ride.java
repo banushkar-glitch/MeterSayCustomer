@@ -2,6 +2,7 @@ package com.metersay.metersay_backend.model;
 
 import jakarta.persistence.*;
 import lombok.*;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
@@ -57,6 +58,46 @@ public class Ride {
     @Column(name = "otp_expires_at")
     private LocalDateTime otpExpiresAt;
 
+    @Column(name = "pickup_lat")
+    private BigDecimal pickupLat;
+
+    @Column(name = "pickup_lng")
+    private BigDecimal pickupLng;
+
+    @Column(name = "drop_lat")
+    private BigDecimal dropLat;
+
+    @Column(name = "drop_lng")
+    private BigDecimal dropLng;
+
+    @Column(name = "distance_km")
+    private BigDecimal distanceKm;
+
+    @Column(name = "fare")
+    private BigDecimal fare;
+
+    @Column(name = "ride_type")
+    private String rideType;
+
+    @Column(name = "search_radius_meters")
+    @Builder.Default
+    private Double searchRadiusMeters = 500.0;
+
+    @Column(name = "completed_at")
+    private LocalDateTime completedAt;
+
+    @Column(name = "rating")
+    private Integer rating;
+
+    @Column(name = "review", length = 500)
+    private String review;
+
+    @Column(name = "cancellation_reason", length = 255)
+    private String cancellationReason;
+
+    @Column(name = "cancelled_at")
+    private LocalDateTime cancelledAt;
+
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
@@ -69,6 +110,21 @@ public class Ride {
         this.updatedAt = LocalDateTime.now();
         if (this.status == null) {
             this.status = RideStatus.SEARCHING_DRIVER;
+        }
+        if (this.searchRadiusMeters == null) {
+            this.searchRadiusMeters = 500.0;
+        }
+        if (this.pickupLatitude != null && this.pickupLat == null) {
+            this.pickupLat = BigDecimal.valueOf(this.pickupLatitude);
+        }
+        if (this.pickupLongitude != null && this.pickupLng == null) {
+            this.pickupLng = BigDecimal.valueOf(this.pickupLongitude);
+        }
+        if (this.dropLatitude != null && this.dropLat == null) {
+            this.dropLat = BigDecimal.valueOf(this.dropLatitude);
+        }
+        if (this.dropLongitude != null && this.dropLng == null) {
+            this.dropLng = BigDecimal.valueOf(this.dropLongitude);
         }
     }
 

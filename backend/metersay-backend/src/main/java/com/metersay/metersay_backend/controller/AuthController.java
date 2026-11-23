@@ -28,5 +28,16 @@ public class AuthController {
         AuthResponse response = authService.login(request);
         return ResponseEntity.ok(response);
     }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<java.util.Map<String, String>> resetPassword(@RequestBody java.util.Map<String, String> request) {
+        String phone = request.get("phoneNumber");
+        String newPassword = request.get("newPassword");
+        if (phone == null || newPassword == null || phone.trim().isEmpty() || newPassword.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body(java.util.Map.of("message", "Phone number and new password are required"));
+        }
+        authService.resetPassword(phone, newPassword);
+        return ResponseEntity.ok(java.util.Map.of("message", "Password updated successfully"));
+    }
 }
 

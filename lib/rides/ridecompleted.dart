@@ -1,10 +1,35 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:metersay_app/rides/mapscreen.dart';
 import 'package:metersay_app/rides/ridereview.dart';
+import 'package:metersay_app/services/location_service.dart';
+import 'package:metersay_app/services/ride_service.dart';
 
 class RideCompletedScreen extends StatefulWidget {
-  const RideCompletedScreen({super.key});
+  final int? rideId;
+  final String? driverName;
+  final String? autoNumber;
+  final String? pickupAddress;
+  final String? dropAddress;
+  final double? pickupLatitude;
+  final double? pickupLongitude;
+  final double? dropLatitude;
+  final double? dropLongitude;
+
+  const RideCompletedScreen({
+    super.key,
+    this.rideId,
+    this.driverName,
+    this.autoNumber,
+    this.pickupAddress,
+    this.dropAddress,
+    this.pickupLatitude,
+    this.pickupLongitude,
+    this.dropLatitude,
+    this.dropLongitude,
+  });
 
   @override
   State<RideCompletedScreen> createState() =>
@@ -13,6 +38,11 @@ class RideCompletedScreen extends StatefulWidget {
 
 class _RideCompletedScreenState
     extends State<RideCompletedScreen> {
+
+  GoogleMapController? _googleMapController;
+  BitmapDescriptor _pickupMarkerIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen);
+  BitmapDescriptor _destinationMarkerIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed);
+  List<LatLng> _routePoints = [];
 
   // =========================================================
   // REVIEW STATE
@@ -24,6 +54,61 @@ class _RideCompletedScreenState
 
   final TextEditingController reviewController =
   TextEditingController();
+  final RideService _rideService = RideService();
+  bool _isSubmittingReview = false;
+  bool _hasSubmittedReview = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMarkerIcons();
+    _fetchRoute();
+  }
+
+  Future<void> _loadMarkerIcons() async {
+    final pickup = await LocationService.getPickupMarkerIcon();
+    final dest = await LocationService.getDestinationMarkerIcon();
+    if (!mounted) return;
+    setState(() {
+      _pickupMarkerIcon = pickup;
+      _destinationMarkerIcon = dest;
+    });
+  }
+
+  Future<void> _fetchRoute() async {
+    if (widget.pickupLatitude != null && widget.pickupLongitude != null &&
+        widget.dropLatitude != null && widget.dropLongitude != null) {
+      final start = LatLng(widget.pickupLatitude!, widget.pickupLongitude!);
+      final end = LatLng(widget.dropLatitude!, widget.dropLongitude!);
+      final details = await LocationService.getShortestRoute(start, end);
+      if (!mounted) return;
+      setState(() {
+        _routePoints = details.polylinePoints;
+      });
+      _fitBounds();
+    }
+  }
+
+  void _fitBounds() {
+    if (widget.pickupLatitude != null && widget.pickupLongitude != null &&
+        widget.dropLatitude != null && widget.dropLongitude != null &&
+        _googleMapController != null) {
+      final double minLat = min(widget.pickupLatitude!, widget.dropLatitude!);
+      final double maxLat = max(widget.pickupLatitude!, widget.dropLatitude!);
+      final double minLng = min(widget.pickupLongitude!, widget.dropLongitude!);
+      final double maxLng = max(widget.pickupLongitude!, widget.dropLongitude!);
+
+      _googleMapController!.animateCamera(
+        CameraUpdate.newLatLngBounds(
+          LatLngBounds(
+            southwest: LatLng(minLat, minLng),
+            northeast: LatLng(maxLat, maxLng),
+          ),
+          50,
+        ),
+      );
+    }
+  }
 
   @override
   void dispose() {
@@ -227,15 +312,14 @@ class _RideCompletedScreenState
                               ),
                               child: GestureDetector(
                                 onTap: () {
-                                  // Skip review
+                                  // Skip review -> Back to Map Home
                                   Navigator.pushAndRemoveUntil(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (context) => const RideReviewScreen(),
+                                      builder: (context) => const MappingScreen(),
                                     ),
-                                        (route) => false,
+                                    (route) => false,
                                   );
-
                                 },
                                 child: Text(
                                   'Skip',
@@ -322,6 +406,68 @@ class _RideCompletedScreenState
 
                           const SizedBox(height: 8),
                           // =================================================
+                          // PART 2.5 — PHYSICAL AUTO METER REMINDER
+                          // =================================================
+
+                          Container(
+                            margin: const EdgeInsets.symmetric(vertical: 12),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFF9E6),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: const Color(0xFFFFD329),
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFFFFD329),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.speed,
+                                    color: Colors.black,
+                                    size: 26,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Pay by Physical Auto Meter',
+                                        style: TextStyle(
+                                          fontFamily: 'Geologica',
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.black,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        'Please pay the fare shown on the auto meter directly to the driver in cash or via UPI.',
+                                        style: TextStyle(
+                                          fontFamily: 'Inter',
+                                          fontSize: 12,
+                                          height: 1.3,
+                                          color: Color(0xFF3C3A3A),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 4),
+
+                          // =================================================
 // PART 3 — RIDE MAP
 // =================================================
 
@@ -343,10 +489,56 @@ class _RideCompletedScreenState
                                   ? 225
                                   : screenWidth * 0.529,
 
-                              child: Image.asset(
-                                'assets/maps.png',
-                                fit: BoxFit.cover,
-                              ),
+                              child: (widget.pickupLatitude != null &&
+                                      widget.pickupLongitude != null &&
+                                      widget.dropLatitude != null &&
+                                      widget.dropLongitude != null)
+                                  ? GoogleMap(
+                                      initialCameraPosition: CameraPosition(
+                                        target: LatLng(
+                                          (widget.pickupLatitude! + widget.dropLatitude!) / 2,
+                                          (widget.pickupLongitude! + widget.dropLongitude!) / 2,
+                                        ),
+                                        zoom: 13.5,
+                                      ),
+                                      onMapCreated: (controller) {
+                                        _googleMapController = controller;
+                                        _fitBounds();
+                                      },
+                                      myLocationEnabled: false,
+                                      myLocationButtonEnabled: false,
+                                      zoomControlsEnabled: false,
+                                      mapToolbarEnabled: false,
+                                      markers: {
+                                        Marker(
+                                          markerId: const MarkerId('pickup'),
+                                          position: LatLng(widget.pickupLatitude!, widget.pickupLongitude!),
+                                          icon: _pickupMarkerIcon,
+                                          anchor: const Offset(0.5, 1.0),
+                                          infoWindow: InfoWindow(title: 'Pickup: ${widget.pickupAddress ?? ""}'),
+                                        ),
+                                        Marker(
+                                          markerId: const MarkerId('drop'),
+                                          position: LatLng(widget.dropLatitude!, widget.dropLongitude!),
+                                          icon: _destinationMarkerIcon,
+                                          anchor: const Offset(0.5, 1.0),
+                                          infoWindow: InfoWindow(title: 'Drop: ${widget.dropAddress ?? ""}'),
+                                        ),
+                                      },
+                                      polylines: {
+                                        if (_routePoints.isNotEmpty)
+                                          Polyline(
+                                            polylineId: const PolylineId('completed_route'),
+                                            points: _routePoints,
+                                            width: 5,
+                                            color: const Color(0xFFFFD329),
+                                          ),
+                                      },
+                                    )
+                                  : Image.asset(
+                                      'assets/maps.png',
+                                      fit: BoxFit.cover,
+                                    ),
                             ),
                           ),
 
@@ -559,26 +751,62 @@ class _RideCompletedScreenState
                                 : screenWidth * 0.102,
 
                             child: ElevatedButton(
-                              onPressed: () {
-                                // Submit review action
-                                FocusScope.of(context).unfocus();
+                              onPressed: (_isSubmittingReview || _hasSubmittedReview)
+                                  ? null
+                                  : () async {
+                                      FocusScope.of(context).unfocus();
 
-                                Navigator.pushAndRemoveUntil(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => const MappingScreen(),
-                                  ),
-                                      (route) => false,
-                                );
+                                      final int ratingToSend = selectedRating > 0 ? selectedRating : 5;
+                                      final String? reviewToSend = reviewController.text.trim().isNotEmpty
+                                          ? reviewController.text.trim()
+                                          : null;
 
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Review submitted successfully',
-                                    ),
-                                  ),
-                                );
-                              },
+                                      if (widget.rideId != null) {
+                                        setState(() => _isSubmittingReview = true);
+                                        final result = await _rideService.submitRating(
+                                          widget.rideId!,
+                                          ratingToSend,
+                                          reviewToSend,
+                                        );
+
+                                        if (!mounted) return;
+                                        setState(() {
+                                          _isSubmittingReview = false;
+                                          if (result['success'] == true) {
+                                            _hasSubmittedReview = true;
+                                          }
+                                        });
+
+                                        if (result['success'] == false) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text(result['message'] ?? 'Unable to submit review'),
+                                              backgroundColor: Colors.red,
+                                            ),
+                                          );
+                                          return;
+                                        }
+                                      }
+
+                                      if (!mounted) return;
+
+                                      Navigator.pushAndRemoveUntil(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => const MappingScreen(),
+                                        ),
+                                        (route) => false,
+                                      );
+
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Review submitted successfully! Thank you.',
+                                          ),
+                                          backgroundColor: Colors.green,
+                                        ),
+                                      );
+                                    },
 
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFFFFEA08),
@@ -592,23 +820,32 @@ class _RideCompletedScreenState
                                 ),
                               ),
 
-                              child: Text(
-                                'Submit Review',
+                              child: _isSubmittingReview
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.0,
+                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+                                      ),
+                                    )
+                                  : Text(
+                                      'Submit Review',
 
-                                style: TextStyle(
-                                  fontFamily: 'Geologica',
+                                      style: TextStyle(
+                                        fontFamily: 'Geologica',
 
-                                  fontSize: isDesktop
-                                      ? 13
-                                      : isTablet
-                                      ? 12
-                                      : screenWidth * 0.031,
+                                        fontSize: isDesktop
+                                            ? 13
+                                            : isTablet
+                                            ? 12
+                                            : screenWidth * 0.031,
 
-                                  fontWeight: FontWeight.w700,
+                                        fontWeight: FontWeight.w700,
 
-                                  color: Colors.black,
-                                ),
-                              ),
+                                        color: Colors.black,
+                                      ),
+                                    ),
                             ),
                           ),
 

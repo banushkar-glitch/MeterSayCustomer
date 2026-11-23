@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:metersay_app/sliders/customermenu.dart';
 import 'package:metersay_app/rides/pickupdroplocation.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:metersay_app/services/location_service.dart';
 
 class MappingScreen extends StatefulWidget {
   const MappingScreen({super.key});
@@ -18,6 +20,69 @@ class _MappingScreenState extends State<MappingScreen> {
 
   final TextEditingController destinationController =
   TextEditingController();
+
+  // ==========================================================
+  // LIVE LOCATION & MAP STATE
+  // ==========================================================
+  GoogleMapController? _googleMapController;
+  LatLng _currentLocation = LocationService.defaultLocation;
+  String _pickupAddress = "Locating pickup point...";
+  bool _isLoadingLocation = true;
+  BitmapDescriptor _pickupMarkerIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMarkerIcon();
+    _initLiveLocation();
+  }
+
+  Future<void> _loadMarkerIcon() async {
+    final icon = await LocationService.getPickupMarkerIcon();
+    if (!mounted) return;
+    setState(() {
+      _pickupMarkerIcon = icon;
+    });
+  }
+
+  Future<void> _initLiveLocation() async {
+    final location = await LocationService.getCurrentLocation();
+    if (!mounted) return;
+    setState(() {
+      _currentLocation = location;
+      _isLoadingLocation = false;
+    });
+    _googleMapController?.animateCamera(
+      CameraUpdate.newLatLngZoom(location, 16.0),
+    );
+
+    final address = await LocationService.getAddressFromCoordinates(
+      location.latitude,
+      location.longitude,
+    );
+    if (!mounted) return;
+    setState(() {
+      _pickupAddress = address;
+    });
+  }
+
+  void _onMapTapped(LatLng position) async {
+    setState(() {
+      _currentLocation = position;
+      _pickupAddress = "Fetching address...";
+    });
+    _googleMapController?.animateCamera(
+      CameraUpdate.newLatLng(position),
+    );
+    final address = await LocationService.getAddressFromCoordinates(
+      position.latitude,
+      position.longitude,
+    );
+    if (!mounted) return;
+    setState(() {
+      _pickupAddress = address;
+    });
+  }
 
   // ==========================================================
   // DISPOSE
@@ -106,15 +171,28 @@ class _MappingScreenState extends State<MappingScreen> {
                 height: double.infinity,
 
                 child: ClipRect(
-                  child: Image.asset(
-                    'assets/maps.png',
-
-                    width: contentWidth,
-                    height: double.infinity,
-
-                    fit: BoxFit.cover,
-
-                    alignment: Alignment.center,
+                  child: GoogleMap(
+                    initialCameraPosition: CameraPosition(
+                      target: _currentLocation,
+                      zoom: 16.0,
+                    ),
+                    onMapCreated: (controller) => _googleMapController = controller,
+                    onTap: _onMapTapped,
+                    myLocationEnabled: true,
+                    myLocationButtonEnabled: false,
+                    zoomControlsEnabled: false,
+                    markers: {
+                      Marker(
+                        markerId: const MarkerId('current_location'),
+                        position: _currentLocation,
+                        icon: _pickupMarkerIcon,
+                        anchor: const Offset(0.5, 1.0),
+                        infoWindow: InfoWindow(
+                          title: 'Pickup Location',
+                          snippet: _pickupAddress,
+                        ),
+                      ),
+                    },
                   ),
                 ),
               ),
@@ -344,29 +422,63 @@ class _MappingScreenState extends State<MappingScreen> {
       bool isDesktop,
       bool isTablet,
       ) {
-    return Container(
-      height: isDesktop ? 40 : isTablet ? 37 : 34,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => PickupDropLocation(
+              initialPickupAddress: _pickupAddress,
+              initialPickupLocation: _currentLocation,
+            ),
+          ),
+        ).then((result) {
+          if (result is Map && result.containsKey('pickupAddress')) {
+            setState(() {
+              _pickupAddress = result['pickupAddress'] ?? _pickupAddress;
+              if (result['pickupLat'] != null && result['pickupLng'] != null) {
+                _currentLocation = LatLng(result['pickupLat'], result['pickupLng']);
+                _googleMapController?.animateCamera(
+                  CameraUpdate.newLatLngZoom(_currentLocation, 16.0),
+                );
+              }
+            });
+          }
+        });
+      },
+      child: Container(
+        height: isDesktop ? 40 : isTablet ? 37 : 34,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
 
-      decoration: BoxDecoration(
-        color: const Color(0xFF808080),
-        borderRadius: BorderRadius.circular(22),
-      ),
-
-      alignment: Alignment.center,
-
-      child: Text(
-        'pickup location address with help of live location or dragging on map',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        textAlign: TextAlign.center,
-
-        style: TextStyle(
-          fontFamily: 'InriaSerif',
-          fontSize: isDesktop ? 14 : isTablet ? 13 : 12,
-          fontWeight: FontWeight.w400,
-          color: Colors.black,
+        decoration: BoxDecoration(
+          color: const Color(0xFF808080),
+          borderRadius: BorderRadius.circular(22),
         ),
+
+        alignment: Alignment.center,
+
+        child: _isLoadingLocation
+            ? const SizedBox(
+                height: 16,
+                width: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : Text(
+                _pickupAddress,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+
+                style: TextStyle(
+                  fontFamily: 'InriaSerif',
+                  fontSize: isDesktop ? 14 : isTablet ? 13 : 12,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.white,
+                ),
+              ),
       ),
     );
   }
@@ -526,9 +638,24 @@ class _MappingScreenState extends State<MappingScreen> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => const PickupDropLocation(),
+                            builder: (context) => PickupDropLocation(
+                              initialPickupAddress: _pickupAddress,
+                              initialPickupLocation: _currentLocation,
+                            ),
                           ),
-                        );
+                        ).then((result) {
+                          if (result is Map && result.containsKey('pickupAddress')) {
+                            setState(() {
+                              _pickupAddress = result['pickupAddress'] ?? _pickupAddress;
+                              if (result['pickupLat'] != null && result['pickupLng'] != null) {
+                                _currentLocation = LatLng(result['pickupLat'], result['pickupLng']);
+                                _googleMapController?.animateCamera(
+                                  CameraUpdate.newLatLngZoom(_currentLocation, 16.0),
+                                );
+                              }
+                            });
+                          }
+                        });
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10),

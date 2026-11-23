@@ -1,17 +1,277 @@
+import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:metersay_app/rides/mapscreen.dart';
 import 'package:metersay_app/rides/ridecompleted.dart';
 import 'package:metersay_app/sliders/customermenu.dart';
+import 'package:metersay_app/services/location_service.dart';
+import 'package:metersay_app/services/ride_service.dart';
+
 class ActiveRideScreen extends StatefulWidget {
-  const ActiveRideScreen({super.key});
+  final int? rideId;
+  final String? driverName;
+  final String? driverPhoneNumber;
+  final String? autoNumber;
+  final String? autoModel;
+  final double? driverLatitude;
+  final double? driverLongitude;
+  final String? pickupAddress;
+  final double? pickupLatitude;
+  final double? pickupLongitude;
+  final String? dropAddress;
+  final double? dropLatitude;
+  final double? dropLongitude;
+
+  const ActiveRideScreen({
+    super.key,
+    this.rideId,
+    this.driverName,
+    this.driverPhoneNumber,
+    this.autoNumber,
+    this.autoModel,
+    this.driverLatitude,
+    this.driverLongitude,
+    this.pickupAddress,
+    this.pickupLatitude,
+    this.pickupLongitude,
+    this.dropAddress,
+    this.dropLatitude,
+    this.dropLongitude,
+  });
 
   @override
   State<ActiveRideScreen> createState() => _ActiveRideScreenState();
 }
 
 class _ActiveRideScreenState extends State<ActiveRideScreen> {
-
   bool isMenuOpen = false;
+  GoogleMapController? _googleMapController;
+  final RideService _rideService = RideService();
+  BitmapDescriptor _pickupMarkerIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen);
+  BitmapDescriptor _destinationMarkerIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed);
+  BitmapDescriptor _autoMarkerIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueYellow);
+  List<LatLng> _routePoints = [];
+
+  Timer? _pollingTimer;
+
+  int? _rideId;
+  String? _driverName;
+  String? _autoNumber;
+  String? _autoModel;
+  String? _driverPhoneNumber;
+  String? _pickupAddress;
+  double? _pickupLat;
+  double? _pickupLng;
+  String? _dropAddress;
+  double? _dropLat;
+  double? _dropLng;
+  double? _currentAutoLat;
+  double? _currentAutoLng;
+
+  String _distanceText = '-- km';
+  String _etaText = '--';
+
+  @override
+  void initState() {
+    super.initState();
+    _rideId = widget.rideId;
+    _driverName = widget.driverName;
+    _autoNumber = widget.autoNumber;
+    _autoModel = widget.autoModel;
+    _driverPhoneNumber = widget.driverPhoneNumber;
+    _pickupAddress = widget.pickupAddress;
+    _pickupLat = widget.pickupLatitude;
+    _pickupLng = widget.pickupLongitude;
+    _dropAddress = widget.dropAddress;
+    _dropLat = widget.dropLatitude;
+    _dropLng = widget.dropLongitude;
+    _currentAutoLat = widget.driverLatitude ?? widget.pickupLatitude;
+    _currentAutoLng = widget.driverLongitude ?? widget.pickupLongitude;
+
+    _loadMarkerIcons();
+    _fetchDrivingRoute();
+    _calculateDistanceAndEta();
+    _fetchActiveRideDetails();
+    _startStatusPolling();
+  }
+
+  Future<void> _loadMarkerIcons() async {
+    final pickup = await LocationService.getPickupMarkerIcon();
+    final dest = await LocationService.getDestinationMarkerIcon();
+    final auto = await LocationService.getAutoMarkerIcon();
+    if (!mounted) return;
+    setState(() {
+      _pickupMarkerIcon = pickup;
+      _destinationMarkerIcon = dest;
+      _autoMarkerIcon = auto;
+    });
+  }
+
+  Future<void> _fetchDrivingRoute() async {
+    if (_pickupLat != null && _pickupLng != null && _dropLat != null && _dropLng != null) {
+      final start = LatLng(_pickupLat!, _pickupLng!);
+      final end = LatLng(_dropLat!, _dropLng!);
+      final details = await LocationService.getShortestRoute(start, end);
+      if (!mounted) return;
+      setState(() {
+        _routePoints = details.polylinePoints;
+      });
+      _fitRouteBounds();
+    }
+  }
+
+  void _fitRouteBounds() {
+    if (_pickupLat != null && _pickupLng != null && _dropLat != null && _dropLng != null && _googleMapController != null) {
+      final double minLat = min(_pickupLat!, _dropLat!);
+      final double maxLat = max(_pickupLat!, _dropLat!);
+      final double minLng = min(_pickupLng!, _dropLng!);
+      final double maxLng = max(_pickupLng!, _dropLng!);
+
+      _googleMapController!.animateCamera(
+        CameraUpdate.newLatLngBounds(
+          LatLngBounds(
+            southwest: LatLng(minLat, minLng),
+            northeast: LatLng(maxLat, maxLng),
+          ),
+          60,
+        ),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _pollingTimer?.cancel();
+    super.dispose();
+  }
+
+  void _calculateDistanceAndEta() {
+    if (_pickupLat != null && _pickupLng != null && _dropLat != null && _dropLng != null) {
+      final double distKm = _haversineDistance(_pickupLat!, _pickupLng!, _dropLat!, _dropLng!);
+      setState(() {
+        _distanceText = '${distKm.toStringAsFixed(1)} km';
+        // Auto speed in city ~25 km/h
+        final int etaMinutes = max(2, (distKm / 25.0 * 60.0).round());
+        final now = DateTime.now().add(Duration(minutes: etaMinutes));
+        final hour = now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour);
+        final ampm = now.hour >= 12 ? 'PM' : 'AM';
+        final minute = now.minute.toString().padLeft(2, '0');
+        _etaText = '$hour.$minute $ampm';
+      });
+    }
+  }
+
+  double _haversineDistance(double lat1, double lon1, double lat2, double lon2) {
+    const double p = 0.017453292519943295;
+    final double a = 0.5 - cos((lat2 - lat1) * p) / 2 +
+        cos(lat1 * p) * cos(lat2 * p) * (1 - cos((lon2 - lon1) * p)) / 2;
+    return 12742 * asin(sqrt(a));
+  }
+
+  Future<void> _fetchActiveRideDetails() async {
+    Map<String, dynamic> response;
+    if (_rideId != null) {
+      response = await _rideService.getRideDetails(_rideId!);
+    } else {
+      response = await _rideService.getActiveRide();
+    }
+
+    if (!mounted) return;
+
+    if (response['success'] == true && response['data'] != null) {
+      final data = response['data'];
+      setState(() {
+        _rideId ??= data['rideId'];
+        _driverName ??= data['driverName'];
+        _autoNumber ??= data['autoNumber'];
+        _autoModel ??= data['autoModel'];
+        _driverPhoneNumber ??= data['driverPhoneNumber'];
+        _pickupAddress ??= data['pickupAddress'];
+        _pickupLat ??= (data['pickupLatitude'] as num?)?.toDouble();
+        _pickupLng ??= (data['pickupLongitude'] as num?)?.toDouble();
+        _dropAddress ??= data['dropAddress'];
+        _dropLat ??= (data['dropLatitude'] as num?)?.toDouble();
+        _dropLng ??= (data['dropLongitude'] as num?)?.toDouble();
+        if (data['driverLatitude'] != null && data['driverLongitude'] != null) {
+          _currentAutoLat = (data['driverLatitude'] as num).toDouble();
+          _currentAutoLng = (data['driverLongitude'] as num).toDouble();
+        }
+      });
+      _calculateDistanceAndEta();
+    }
+  }
+
+  void _startStatusPolling() {
+    _pollingTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+      if (!mounted) return;
+
+      Map<String, dynamic> response;
+      if (_rideId != null) {
+        response = await _rideService.getRideDetails(_rideId!);
+      } else {
+        response = await _rideService.getActiveRide();
+      }
+
+      if (!mounted) return;
+
+      if (response['success'] == true && response['data'] != null) {
+        final data = response['data'];
+        final String? status = data['status'];
+
+        if (data['driverLatitude'] != null && data['driverLongitude'] != null) {
+          setState(() {
+            _currentAutoLat = (data['driverLatitude'] as num).toDouble();
+            _currentAutoLng = (data['driverLongitude'] as num).toDouble();
+          });
+        }
+
+        if (status == 'COMPLETED' || status == 'RIDE_COMPLETED' || status == 'completed') {
+          _pollingTimer?.cancel();
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Ride completed! Please pay the fare shown on the auto meter to the driver.'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 4),
+            ),
+          );
+
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => RideCompletedScreen(
+                rideId: _rideId,
+                driverName: _driverName,
+                autoNumber: _autoNumber,
+                pickupAddress: _pickupAddress,
+                dropAddress: _dropAddress,
+                pickupLatitude: _pickupLat,
+                pickupLongitude: _pickupLng,
+                dropLatitude: _dropLat,
+                dropLongitude: _dropLng,
+              ),
+            ),
+          );
+        } else if (status == 'CANCELLED' || status == 'cancelled') {
+          _pollingTimer?.cancel();
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Ride has been cancelled.'),
+              backgroundColor: Colors.black87,
+            ),
+          );
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (context) => const MappingScreen()),
+            (route) => false,
+          );
+        }
+      }
+    });
+  }
 
 
 
@@ -157,11 +417,58 @@ class _ActiveRideScreenState extends State<ActiveRideScreen> {
                       child: Center(
                         child: SizedBox(
                           width: contentMaxWidth,
-                          child: Image.asset(
-                            'assets/maps.png',
-                            width: contentMaxWidth,
-                            height: double.infinity,
-                            fit: BoxFit.cover,
+                          height: double.infinity,
+                          child: GoogleMap(
+                            initialCameraPosition: CameraPosition(
+                              target: LatLng(
+                                _currentAutoLat ?? _pickupLat ?? 18.5204,
+                                _currentAutoLng ?? _pickupLng ?? 73.8567,
+                              ),
+                              zoom: 14.5,
+                            ),
+                            onMapCreated: (controller) {
+                              _googleMapController = controller;
+                              _fitRouteBounds();
+                            },
+                            myLocationEnabled: false,
+                            myLocationButtonEnabled: false,
+                            zoomControlsEnabled: false,
+                            mapToolbarEnabled: false,
+                            markers: {
+                              if (_pickupLat != null && _pickupLng != null)
+                                Marker(
+                                  markerId: const MarkerId('pickup'),
+                                  position: LatLng(_pickupLat!, _pickupLng!),
+                                  icon: _pickupMarkerIcon,
+                                  anchor: const Offset(0.5, 1.0),
+                                  infoWindow: InfoWindow(title: 'Pickup: ${_pickupAddress ?? ""}'),
+                                ),
+                              if (_dropLat != null && _dropLng != null)
+                                Marker(
+                                  markerId: const MarkerId('drop'),
+                                  position: LatLng(_dropLat!, _dropLng!),
+                                  icon: _destinationMarkerIcon,
+                                  anchor: const Offset(0.5, 1.0),
+                                  infoWindow: InfoWindow(title: 'Drop: ${_dropAddress ?? ""}'),
+                                ),
+                              if (_currentAutoLat != null && _currentAutoLng != null)
+                                Marker(
+                                  markerId: const MarkerId('auto'),
+                                  position: LatLng(_currentAutoLat!, _currentAutoLng!),
+                                  icon: _autoMarkerIcon,
+                                  anchor: const Offset(0.5, 0.5),
+                                  infoWindow: InfoWindow(title: 'Auto: ${_driverName ?? "Driver"} (${_autoNumber ?? ""})'),
+                                ),
+                            },
+                            polylines: {
+                              if (_routePoints.isNotEmpty)
+                                Polyline(
+                                  polylineId: const PolylineId('active_route'),
+                                  points: _routePoints,
+                                  width: 5,
+                                  color: const Color(0xFFFFD329),
+                                ),
+                            },
                           ),
                         ),
                       ),
@@ -318,7 +625,7 @@ class _ActiveRideScreenState extends State<ActiveRideScreen> {
                                           children: [
 
                                             Text(
-                                              'Name : Mahesh Jagtap',
+                                              'Name : ${_driverName ?? 'Mahesh Jagtap'}',
 
                                               maxLines: 1,
 
@@ -342,7 +649,7 @@ class _ActiveRideScreenState extends State<ActiveRideScreen> {
                                             const SizedBox(height: 4),
 
                                             Text(
-                                              'Vh no : MH 12 AA 1234',
+                                              'Vh no : ${_autoNumber ?? 'MH 12 AA 1234'}',
 
                                               maxLines: 1,
 
@@ -472,9 +779,7 @@ class _ActiveRideScreenState extends State<ActiveRideScreen> {
                                                     const SizedBox(height: 6),
 
                                                     Text(
-                                                      '283/5 Shaniwar Peth '
-                                                          '(Bhegade Ali) Talegaon Dabhade '
-                                                          'Maval Pune 410506',
+                                                      _pickupAddress ?? 'Pickup location',
                                                       maxLines: 3,
                                                       overflow: TextOverflow.ellipsis,
                                                       style: TextStyle(
@@ -530,7 +835,7 @@ class _ActiveRideScreenState extends State<ActiveRideScreen> {
                                                     const SizedBox(height: 4),
 
                                                     Text(
-                                                      '6.45 PM',
+                                                      _etaText,
 
                                                       style: TextStyle(
                                                         fontFamily: 'Geologica',
@@ -611,9 +916,7 @@ class _ActiveRideScreenState extends State<ActiveRideScreen> {
                                                     const SizedBox(height: 6),
 
                                                     Text(
-                                                      'Plot 5 Ravivar Peth '
-                                                          '(Mali Ali) Swargate Parvati '
-                                                          'Pune 411506',
+                                                      _dropAddress ?? 'Drop location',
                                                       maxLines: 3,
                                                       overflow: TextOverflow.ellipsis,
                                                       style: TextStyle(
@@ -669,7 +972,7 @@ class _ActiveRideScreenState extends State<ActiveRideScreen> {
                                                     const SizedBox(height: 4),
 
                                                     Text(
-                                                      '5 km',
+                                                      _distanceText,
 
                                                       style: TextStyle(
                                                         fontFamily: 'Geologica',

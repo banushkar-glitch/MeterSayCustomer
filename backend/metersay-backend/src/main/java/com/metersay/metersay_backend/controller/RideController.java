@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/rides")
@@ -49,9 +50,11 @@ public class RideController {
     @PostMapping("/{rideId}/cancel")
     public ResponseEntity<RideDetailsResponse> cancelRide(
             @PathVariable Long rideId,
+            @RequestBody(required = false) Map<String, String> body,
             Authentication authentication) {
         String phoneNumber = authentication.getName();
-        RideDetailsResponse response = rideService.cancelRide(rideId, phoneNumber);
+        String reason = body != null ? body.get("reason") : null;
+        RideDetailsResponse response = rideService.cancelRide(rideId, phoneNumber, reason);
         return ResponseEntity.ok(response);
     }
 
@@ -80,6 +83,21 @@ public class RideController {
     @PostMapping("/{rideId}/complete-ride")
     public ResponseEntity<RideDetailsResponse> completeRide(@PathVariable Long rideId) {
         RideDetailsResponse response = rideService.completeRide(rideId);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/{rideId}/rate")
+    public ResponseEntity<RideDetailsResponse> rateRide(
+            @PathVariable Long rideId,
+            @RequestBody Map<String, Object> body,
+            Authentication authentication) {
+        String phoneNumber = authentication.getName();
+        Integer rating = null;
+        if (body != null && body.containsKey("rating") && body.get("rating") != null) {
+            rating = ((Number) body.get("rating")).intValue();
+        }
+        String review = body != null && body.containsKey("review") ? (String) body.get("review") : null;
+        RideDetailsResponse response = rideService.rateRide(rideId, phoneNumber, rating, review);
         return ResponseEntity.ok(response);
     }
 }

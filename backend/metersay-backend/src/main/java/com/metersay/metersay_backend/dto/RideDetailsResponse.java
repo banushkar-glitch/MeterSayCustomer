@@ -22,6 +22,7 @@ public class RideDetailsResponse {
     private String dropAddress;
     private Double dropLatitude;
     private Double dropLongitude;
+    private Double searchRadiusMeters;
 
     // Driver details (populated when assigned)
     private Long driverId;
@@ -37,6 +38,11 @@ public class RideDetailsResponse {
     private LocalDateTime otpExpiresAt;
 
     private String message;
+    private Integer rating;
+    private String review;
+    private LocalDateTime completedAt;
+    private String cancellationReason;
+    private LocalDateTime cancelledAt;
     private LocalDateTime createdAt;
 }
 

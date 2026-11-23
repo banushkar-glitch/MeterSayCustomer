@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import 'otp_screen.dart';
+import '../rides/mapscreen.dart';
+import '../services/auth_service.dart';
+
 class RegistrationScreen extends StatefulWidget {
   const RegistrationScreen({Key? key}) : super(key: key);
 
@@ -26,6 +28,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   //==============================
 
   bool obscurePassword = true;
+  bool _isLoading = false;
 
   //==============================
   // Dispose Controllers
@@ -37,6 +40,58 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     phoneController.dispose();
     passwordController.dispose();
     super.dispose();
+  }
+
+  //==============================
+  // Registration Action
+  //==============================
+
+  Future<void> _handleRegistration() async {
+    FocusScope.of(context).unfocus();
+
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    final result = await AuthService().register(
+      name: nameController.text.trim(),
+      phoneNumber: phoneController.text.trim(),
+      password: passwordController.text,
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      _isLoading = false;
+    });
+
+    if (result['success'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Registration Successful"),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const MappingScreen(),
+        ),
+        (route) => false,
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result['message'] ?? "Registration failed"),
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
+    }
   }
 
   @override
@@ -219,388 +274,393 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                           maxWidth: formWidth,
                         ),
 
-                        child: Column(
+                        child: Form(
+                          key: _formKey,
 
-                          crossAxisAlignment:
-                          CrossAxisAlignment.stretch,
+                          child: Column(
 
-                          children: [
+                            crossAxisAlignment:
+                            CrossAxisAlignment.stretch,
 
-                            SizedBox(
-                              height: isDesktop ? 18 : 10,
-                            ),
+                            children: [
 
-                            // Registration Image
-                            Center(
+                              SizedBox(
+                                height: isDesktop ? 18 : 10,
+                              ),
 
-                              child: Image.asset(
+                              // Registration Image
+                              Center(
 
-                                "assets/registration.png",
+                                child: Image.asset(
 
-                                height: imageSize,
+                                  "assets/registration.png",
 
-                                fit: BoxFit.contain,
+                                  height: imageSize,
+
+                                  fit: BoxFit.contain,
+
+                                ),
 
                               ),
 
-                            ),
+                              SizedBox(
+                                height: isDesktop ? 30 : 24,
+                              ),
 
-                            SizedBox(
-                              height: isDesktop ? 30 : 24,
-                            ),
-
-                            //==============================
+//==============================
 // Name
 //==============================
 
-                            Text(
-                              "Name",
-                              style: TextStyle(
-                                fontSize: labelSize,
-                                fontWeight: FontWeight.w500,
+                              Text(
+                                "Name",
+                                style: TextStyle(
+                                  fontSize: labelSize,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
-                            ),
 
-                            const SizedBox(height: 8),
+                              const SizedBox(height: 8),
 
-                            SizedBox(
+                              SizedBox(
 
-                              height: textFieldHeight,
+                                height: textFieldHeight,
 
-                              child: TextFormField(
+                                child: TextFormField(
 
-                                controller: nameController,
+                                  controller: nameController,
 
-                                validator: (value) {
+                                  validator: (value) {
 
-                                  if (value == null || value.trim().isEmpty) {
-                                    return "Please enter your name";
-                                  }
+                                    if (value == null || value.trim().isEmpty) {
+                                      return "Please enter your name";
+                                    }
 
-                                  return null;
+                                    return null;
 
-                                },
+                                  },
 
-                                textInputAction: TextInputAction.next,
+                                  textInputAction: TextInputAction.next,
 
-                                autofillHints: const [
-                                  AutofillHints.name,
-                                ],
+                                  autofillHints: const [
+                                    AutofillHints.name,
+                                  ],
 
-                                cursorColor: Colors.black,
+                                  cursorColor: Colors.black,
 
-                                decoration: InputDecoration(
+                                  decoration: InputDecoration(
 
-                                  hintText: "Enter Name",
+                                    hintText: "Enter Name",
 
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    vertical: 14,
-                                  ),
-
-                                  prefixIcon: Icon(
-                                    Icons.person_outline,
-                                    size: iconSize,
-                                  ),
-
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide(
-                                      color: Colors.grey.shade300,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      vertical: 14,
                                     ),
-                                  ),
 
-                                  focusedBorder: const OutlineInputBorder(
-                                    borderRadius: BorderRadius.all(
-                                      Radius.circular(12),
+                                    prefixIcon: Icon(
+                                      Icons.person_outline,
+                                      size: iconSize,
                                     ),
-                                    borderSide: BorderSide(
-                                      color: Colors.black54,
+
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
                                     ),
+
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(
+                                        color: Colors.grey.shade300,
+                                      ),
+                                    ),
+
+                                    focusedBorder: const OutlineInputBorder(
+                                      borderRadius: BorderRadius.all(
+                                        Radius.circular(12),
+                                      ),
+                                      borderSide: BorderSide(
+                                        color: Colors.black54,
+                                      ),
+                                    ),
+
                                   ),
 
                                 ),
 
                               ),
 
-                            ),
-
-                            SizedBox(height: isDesktop ? 22 : 18),
+                              SizedBox(height: isDesktop ? 22 : 18),
 
 //==============================
 // Phone Number
 //==============================
 
-                            Text(
-                              "Phone Number",
-                              style: TextStyle(
-                                fontSize: labelSize,
-                                fontWeight: FontWeight.w500,
+                              Text(
+                                "Phone Number",
+                                style: TextStyle(
+                                  fontSize: labelSize,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
-                            ),
 
-                            const SizedBox(height: 8),
+                              const SizedBox(height: 8),
 
-                            SizedBox(
+                              SizedBox(
 
-                              height: textFieldHeight,
+                                height: textFieldHeight,
 
-                              child: TextFormField(
+                                child: TextFormField(
 
-                                controller: phoneController,
+                                  controller: phoneController,
 
-                                validator: (value) {
+                                  validator: (value) {
 
-                                  if (value == null || value.trim().isEmpty) {
-                                    return "Please enter phone number";
-                                  }
+                                    if (value == null || value.trim().isEmpty) {
+                                      return "Please enter phone number";
+                                    }
 
-                                  if (value.length != 10) {
-                                    return "Enter valid phone number";
-                                  }
+                                    if (value.length != 10) {
+                                      return "Enter valid phone number";
+                                    }
 
-                                  return null;
+                                    return null;
 
-                                },
+                                  },
 
-                                cursorColor: Colors.black,
+                                  cursorColor: Colors.black,
 
-                                keyboardType: TextInputType.phone,
+                                  keyboardType: TextInputType.phone,
 
-                                textInputAction: TextInputAction.next,
+                                  textInputAction: TextInputAction.next,
 
 
-                                autofillHints: const [
-                                  AutofillHints.name,
-                                ],
+                                  autofillHints: const [
+                                    AutofillHints.name,
+                                  ],
 
-                                decoration: InputDecoration(
+                                  decoration: InputDecoration(
 
-                                  hintText: "Enter Phone Number",
+                                    hintText: "Enter Phone Number",
 
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    vertical: 14,
-                                  ),
-
-                                  prefixIcon: Icon(
-                                    Icons.phone_outlined,
-                                    size: iconSize,
-                                  ),
-
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide(
-                                      color: Colors.grey.shade300,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      vertical: 14,
                                     ),
-                                  ),
 
-                                  focusedBorder: const OutlineInputBorder(
-                                    borderRadius: BorderRadius.all(
-                                      Radius.circular(12),
+                                    prefixIcon: Icon(
+                                      Icons.phone_outlined,
+                                      size: iconSize,
                                     ),
-                                    borderSide: BorderSide(
-                                      color: Colors.black54,
+
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
                                     ),
+
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(
+                                        color: Colors.grey.shade300,
+                                      ),
+                                    ),
+
+                                    focusedBorder: const OutlineInputBorder(
+                                      borderRadius: BorderRadius.all(
+                                        Radius.circular(12),
+                                      ),
+                                      borderSide: BorderSide(
+                                        color: Colors.black54,
+                                      ),
+                                    ),
+
                                   ),
 
                                 ),
 
                               ),
 
-                            ),
-
-                            SizedBox(height: isDesktop ? 22 : 18),
+                              SizedBox(height: isDesktop ? 22 : 18),
 
 //==============================
 // Password
 //==============================
 
-                            Text(
-                              "Set Password",
-                              style: TextStyle(
-                                fontSize: labelSize,
-                                fontWeight: FontWeight.w500,
+                              Text(
+                                "Set Password",
+                                style: TextStyle(
+                                  fontSize: labelSize,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
-                            ),
 
-                            const SizedBox(height: 8),
+                              const SizedBox(height: 8),
 
-                            SizedBox(
+                              SizedBox(
 
-                              height: textFieldHeight,
+                                height: textFieldHeight,
 
-                              child: TextFormField(
+                                child: TextFormField(
 
-                                controller: passwordController,
+                                  controller: passwordController,
 
-                                validator: (value) {
+                                  validator: (value) {
 
-                                  if (value == null || value.isEmpty) {
-                                    return "Please enter password";
-                                  }
+                                    if (value == null || value.isEmpty) {
+                                      return "Please enter password";
+                                    }
 
-                                  if (value.length < 8) {
-                                    return "Minimum 8 characters";
-                                  }
+                                    if (value.length < 8) {
+                                      return "Minimum 8 characters";
+                                    }
 
-                                  return null;
+                                    return null;
 
-                                },
-                                cursorColor: Colors.black,
+                                  },
+                                  cursorColor: Colors.black,
 
-                                obscureText: obscurePassword,
+                                  obscureText: obscurePassword,
 
-                                textInputAction: TextInputAction.done,
+                                  textInputAction: TextInputAction.done,
 
-                                autofillHints: const [
-                                  AutofillHints.name,
-                                ],
+                                  autofillHints: const [
+                                    AutofillHints.name,
+                                  ],
 
-                                decoration: InputDecoration(
+                                  decoration: InputDecoration(
 
-                                  hintText: "Enter Password",
+                                    hintText: "Enter Password",
 
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    vertical: 14,
-                                  ),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      vertical: 14,
+                                    ),
 
-                                  prefixIcon: Icon(
-                                    Icons.lock_outline,
-                                    size: iconSize,
-                                  ),
+                                    prefixIcon: Icon(
+                                      Icons.lock_outline,
+                                      size: iconSize,
+                                    ),
 
-                                  suffixIcon: IconButton(
+                                    suffixIcon: IconButton(
 
-                                    onPressed: () {
+                                      onPressed: () {
 
-                                      setState(() {
+                                        setState(() {
 
-                                        obscurePassword = !obscurePassword;
+                                          obscurePassword = !obscurePassword;
 
-                                      });
+                                        });
 
-                                    },
+                                      },
 
-                                    icon: Icon(
+                                      icon: Icon(
 
-                                      obscurePassword
-                                          ? Icons.visibility_off_outlined
-                                          : Icons.visibility_outlined,
+                                        obscurePassword
+                                            ? Icons.visibility_off_outlined
+                                            : Icons.visibility_outlined,
+
+                                      ),
 
                                     ),
 
-                                  ),
-
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide(
-                                      color: Colors.grey.shade300,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
                                     ),
-                                  ),
 
-                                  focusedBorder: const OutlineInputBorder(
-                                    borderRadius: BorderRadius.all(
-                                      Radius.circular(12),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(
+                                        color: Colors.grey.shade300,
+                                      ),
                                     ),
-                                    borderSide: BorderSide(
-                                      color: Colors.black54,
+
+                                    focusedBorder: const OutlineInputBorder(
+                                      borderRadius: BorderRadius.all(
+                                        Radius.circular(12),
+                                      ),
+                                      borderSide: BorderSide(
+                                        color: Colors.black54,
+                                      ),
                                     ),
+
                                   ),
 
                                 ),
 
                               ),
 
-                            ),
-
-                            SizedBox(height: isDesktop ? 24 : 20),
+                              SizedBox(height: isDesktop ? 24 : 20),
 
 // Password Rules Card
 
-                            Container(
+                              Container(
 
-                              width: double.infinity,
+                                width: double.infinity,
 
-                              padding: const EdgeInsets.all(16),
+                                padding: const EdgeInsets.all(16),
 
-                              decoration: BoxDecoration(
+                                decoration: BoxDecoration(
 
-                                color: const Color(0xFFFFF8D9),
+                                  color: const Color(0xFFFFF8D9),
 
-                                borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(12),
 
-                                border: Border.all(
-                                  color: Colors.grey.shade300,
+                                  border: Border.all(
+                                    color: Colors.grey.shade300,
+                                  ),
+
+                                ),
+
+                                child: Column(
+
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+
+                                  children: [
+
+                                    Text(
+
+                                      "Password must contain:",
+
+                                      style: TextStyle(
+
+                                        fontSize: labelSize,
+
+                                        fontWeight: FontWeight.w600,
+
+                                      ),
+
+                                    ),
+
+                                    const SizedBox(height: 12),
+
+                                    _passwordRule(
+                                      "At least 8 characters",
+                                    ),
+
+                                    const SizedBox(height: 8),
+
+                                    _passwordRule(
+                                      "One uppercase letter",
+                                    ),
+
+                                    const SizedBox(height: 8),
+
+                                    _passwordRule(
+                                      "One lowercase letter",
+                                    ),
+
+                                    const SizedBox(height: 8),
+
+                                    _passwordRule(
+                                      "One number or special character",
+                                    ),
+
+                                  ],
+
                                 ),
 
                               ),
 
-                              child: Column(
-
-                                crossAxisAlignment: CrossAxisAlignment.start,
-
-                                children: [
-
-                                  Text(
-
-                                    "Password must contain:",
-
-                                    style: TextStyle(
-
-                                      fontSize: labelSize,
-
-                                      fontWeight: FontWeight.w600,
-
-                                    ),
-
-                                  ),
-
-                                  const SizedBox(height: 12),
-
-                                  _passwordRule(
-                                    "At least 8 characters",
-                                  ),
-
-                                  const SizedBox(height: 8),
-
-                                  _passwordRule(
-                                    "One uppercase letter",
-                                  ),
-
-                                  const SizedBox(height: 8),
-
-                                  _passwordRule(
-                                    "One lowercase letter",
-                                  ),
-
-                                  const SizedBox(height: 8),
-
-                                  _passwordRule(
-                                    "One number or special character",
-                                  ),
-
-                                ],
-
+                              SizedBox(
+                                height: isDesktop ? 24 : 20,
                               ),
 
-                            ),
+                            ],
 
-                            SizedBox(
-                              height: isDesktop ? 24 : 20,
-                            ),
-
-                          ],
+                          ),
 
                         ),
 
@@ -659,38 +719,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
                         child: ElevatedButton(
 
-                          onPressed: () {
-
-                            // TODO : Submit Button
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const OtpScreen(),
-                              ),
-                            );
-
-
-                              FocusScope.of(context).unfocus();
-
-                              if (_formKey.currentState!.validate()) {
-
-                                ScaffoldMessenger.of(context).showSnackBar(
-
-                                  const SnackBar(
-
-                                    content: Text(
-                                      "Registration Successful",
-                                    ),
-
-                                  ),
-
-                                );
-
-                              }
-
-
-
-                          },
+                          onPressed: _isLoading ? null : _handleRegistration,
 
                           style: ElevatedButton.styleFrom(
 
@@ -708,19 +737,28 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
                           ),
 
-                          child: Text(
+                          child: _isLoading
+                              ? const SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.black,
+                                    strokeWidth: 2.5,
+                                  ),
+                                )
+                              : Text(
 
-                            "Submit",
+                                  "Submit",
 
-                            style: TextStyle(
+                                  style: TextStyle(
 
-                              fontSize: isDesktop ? 18 : 16,
+                                    fontSize: isDesktop ? 18 : 16,
 
-                              fontWeight: FontWeight.w600,
+                                    fontWeight: FontWeight.w600,
 
-                            ),
+                                  ),
 
-                          ),
+                                ),
 
                         ),
 

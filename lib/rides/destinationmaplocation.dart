@@ -1,8 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:metersay_app/rides/bookride.dart';
+import 'package:metersay_app/services/location_service.dart';
 
 class DestinationMapScreen extends StatefulWidget {
-  const DestinationMapScreen({Key? key}) : super(key: key);
+  final String? pickupAddress;
+  final double? pickupLatitude;
+  final double? pickupLongitude;
+  final String? initialDropAddress;
+  final double? initialDropLatitude;
+  final double? initialDropLongitude;
+
+  const DestinationMapScreen({
+    Key? key,
+    this.pickupAddress,
+    this.pickupLatitude,
+    this.pickupLongitude,
+    this.initialDropAddress,
+    this.initialDropLatitude,
+    this.initialDropLongitude,
+  }) : super(key: key);
 
   @override
   State<DestinationMapScreen> createState() =>
@@ -12,32 +29,55 @@ class DestinationMapScreen extends StatefulWidget {
 class _DestinationMapScreenState
     extends State<DestinationMapScreen> {
 
-  // ============================================================
-  // DESTINATION DATA
-  // ============================================================
-
-  String destinationAddress = "";
-
-  // ============================================================
-  // FUTURE MAP / API DATA
-  // ============================================================
-
+  GoogleMapController? _googleMapController;
+  LatLng currentCenter = LocationService.defaultLocation;
+  String destinationAddress = "Locating drop position...";
   double? destinationLatitude;
   double? destinationLongitude;
+  bool isGeocoding = false;
 
-  // TODO:
-  // Later these values will come from the map and API.
-  //
-  // Map moved
-  //      ↓
-  // Get latitude + longitude
-  //      ↓
-  // Reverse geocoding API
-  //      ↓
-  // destinationAddress
-  //      ↓
-  // Address displayed automatically
-  // ============================================================
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialDropAddress != null && widget.initialDropAddress!.isNotEmpty) {
+      destinationAddress = widget.initialDropAddress!;
+    }
+    if (widget.initialDropLatitude != null && widget.initialDropLongitude != null) {
+      currentCenter = LatLng(widget.initialDropLatitude!, widget.initialDropLongitude!);
+      destinationLatitude = currentCenter.latitude;
+      destinationLongitude = currentCenter.longitude;
+    } else if (widget.pickupLatitude != null && widget.pickupLongitude != null) {
+      currentCenter = LatLng(widget.pickupLatitude!, widget.pickupLongitude!);
+      destinationLatitude = currentCenter.latitude;
+      destinationLongitude = currentCenter.longitude;
+    } else {
+      _initLocation();
+    }
+  }
+
+  Future<void> _initLocation() async {
+    final pos = await LocationService.getCurrentLocation();
+    if (!mounted) return;
+    setState(() {
+      currentCenter = pos;
+      destinationLatitude = pos.latitude;
+      destinationLongitude = pos.longitude;
+    });
+    _googleMapController?.animateCamera(
+      CameraUpdate.newLatLngZoom(pos, 16.0),
+    );
+    _reverseGeocode(pos.latitude, pos.longitude);
+  }
+
+  Future<void> _reverseGeocode(double lat, double lng) async {
+    setState(() => isGeocoding = true);
+    final addr = await LocationService.getAddressFromCoordinates(lat, lng);
+    if (!mounted) return;
+    setState(() {
+      destinationAddress = addr;
+      isGeocoding = false;
+    });
+  }
 
 
   @override
@@ -251,20 +291,39 @@ class _DestinationMapScreenState
                         child: Center(
                           child: SizedBox(
                             width: contentMaxWidth,
-                            child: Container(
-                              color: const Color(0xFFF2F2F2),
-
-                              child: Image.asset(
-                                "assets/maps.png",
-                                width: contentMaxWidth,
-                                height: double.infinity,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return Container(
-                                    color: const Color(0xFFE8E8E8),
-                                  );
-                                },
-                              ),
+                            child: Stack(
+                              children: [
+                                GoogleMap(
+                                  initialCameraPosition: CameraPosition(
+                                    target: currentCenter,
+                                    zoom: 16.0,
+                                  ),
+                                  onMapCreated: (controller) => _googleMapController = controller,
+                                  onCameraMove: (position) {
+                                    destinationLatitude = position.target.latitude;
+                                    destinationLongitude = position.target.longitude;
+                                  },
+                                  onCameraIdle: () {
+                                    if (destinationLatitude != null && destinationLongitude != null) {
+                                      _reverseGeocode(destinationLatitude!, destinationLongitude!);
+                                    }
+                                  },
+                                  myLocationEnabled: true,
+                                  myLocationButtonEnabled: false,
+                                  zoomControlsEnabled: false,
+                                ),
+                                // Stationary center pin (Red for destination)
+                                const Center(
+                                  child: Padding(
+                                    padding: EdgeInsets.only(bottom: 22),
+                                    child: Icon(
+                                      Icons.location_pin,
+                                      size: 34,
+                                      color: Colors.red,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -480,7 +539,14 @@ class _DestinationMapScreenState
                                         Navigator.pushReplacement(
                                           context,
                                           MaterialPageRoute(
-                                            builder: (context) => const BookRideScreen(),
+                                            builder: (context) => BookRideScreen(
+                                              pickupAddress: widget.pickupAddress ?? "Current location",
+                                              pickupLatitude: widget.pickupLatitude,
+                                              pickupLongitude: widget.pickupLongitude,
+                                              destinationAddress: destinationAddress,
+                                              destinationLatitude: destinationLatitude ?? currentCenter.latitude,
+                                              destinationLongitude: destinationLongitude ?? currentCenter.longitude,
+                                            ),
                                           ),
                                         );
                                         debugPrint(

@@ -1,7 +1,54 @@
 import 'package:flutter/material.dart';
+import '../services/auth_service.dart';
+import 'createaccount_screen.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  String _customerName = "Customer";
+  String _customerPhone = "+91XXXXXXXXXX";
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    // First load from local storage
+    final localData = await AuthService().getCurrentUser();
+    if (mounted && localData['name'] != null && localData['name'].toString().isNotEmpty) {
+      setState(() {
+        _customerName = localData['name'];
+        _customerPhone = localData['phoneNumber'];
+      });
+    }
+
+    // Then attempt fetching fresh profile from backend
+    final result = await AuthService().fetchProfile();
+    if (mounted && result['success'] == true && result['data'] != null) {
+      setState(() {
+        _customerName = result['data']['name'] ?? _customerName;
+        _customerPhone = result['data']['phoneNumber'] ?? _customerPhone;
+      });
+    }
+  }
+
+  Future<void> _handleLogout() async {
+    await AuthService().logout();
+    if (!mounted) return;
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => const HomeScreen()),
+      (route) => false,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -18,12 +65,12 @@ class ProfileScreen extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Icon(Icons.menu, size: 28),
+                    const Icon(Icons.menu, size: 28),
                     const Text(
                       "My Profile",
                       style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                     ),
-                    Icon(Icons.notifications_none, size: 28),
+                    const Icon(Icons.notifications_none, size: 28),
                   ],
                 ),
               ),
@@ -43,15 +90,15 @@ class ProfileScreen extends StatelessWidget {
 
               const SizedBox(height: 15),
 
-              // 👤 NAME (Backend replace)
-              const Text(
-                "Driver Name",
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
+              // 👤 NAME (Backend connected)
+              Text(
+                _customerName,
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
               ),
 
               const SizedBox(height: 8),
 
-              // ⭐ RATING (Backend replace)
+              // ⭐ RATING
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: const [
@@ -86,9 +133,7 @@ class ProfileScreen extends StatelessWidget {
                         borderRadius: BorderRadius.circular(20),
                       ),
                     ),
-                    onPressed: () {
-                      // 🔴 LOGOUT LOGIC (backend)
-                    },
+                    onPressed: _handleLogout,
                     child: const Text(
                       "Logout",
                       style: TextStyle(color: Colors.red, fontSize: 18),
@@ -124,7 +169,7 @@ class ProfileScreen extends StatelessWidget {
             _infoRow(Icons.directions_car, "Vehicle Number", "MH XXXXXX"),
             const Divider(),
 
-            _infoRow(Icons.phone, "Phone", "+91XXXXXXXXXX"),
+            _infoRow(Icons.phone, "Phone", _customerPhone),
           ],
         ),
       ),
@@ -142,7 +187,7 @@ class ProfileScreen extends StatelessWidget {
             child: Text(title, style: const TextStyle(fontSize: 16)),
           ),
           Text(
-            value, // 🔗 backend replace
+            value,
             style: const TextStyle(fontWeight: FontWeight.w500),
           ),
         ],
@@ -217,7 +262,7 @@ class ProfileScreen extends StatelessWidget {
         required VoidCallback onTap,
       }) {
     return InkWell(
-      onTap: onTap, // ✅ clickable
+      onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(

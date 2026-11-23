@@ -22,6 +22,7 @@ public class BookRideResponse {
     private String dropAddress;
     private Double dropLatitude;
     private Double dropLongitude;
+    private Double searchRadiusMeters;
     private int nearbyDriversCount;
     private String message;
     private LocalDateTime createdAt;

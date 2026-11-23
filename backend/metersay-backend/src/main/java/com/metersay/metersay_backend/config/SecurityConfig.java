@@ -49,6 +49,8 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers("/api/auth/**").permitAll()
+                .requestMatchers("/api/admin/**").permitAll()
+                .requestMatchers("/api/rides/*/verify-otp", "/api/rides/*/driver-arrived", "/api/rides/*/assign-driver", "/api/rides/*/complete-ride").permitAll()
                 .requestMatchers("/error").permitAll()
                 .anyRequest().authenticated()
             );

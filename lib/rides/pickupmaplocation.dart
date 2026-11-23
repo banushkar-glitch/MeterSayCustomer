@@ -1,8 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:metersay_app/rides/pickupdroplocation.dart';
+import 'package:metersay_app/services/location_service.dart';
 
 class PickupMapScreen extends StatefulWidget {
-  const PickupMapScreen({Key? key}) : super(key: key);
+  final String? initialAddress;
+  final dynamic initialLocation;
+
+  const PickupMapScreen({
+    Key? key,
+    this.initialAddress,
+    this.initialLocation,
+  }) : super(key: key);
 
   @override
   State<PickupMapScreen> createState() => _PickupMapScreenState();
@@ -10,25 +19,51 @@ class PickupMapScreen extends StatefulWidget {
 
 class _PickupMapScreenState extends State<PickupMapScreen> {
 
-  // ============================================================
-  // API / MAP DATA - TO BE CONNECTED LATER
-  // ============================================================
-
-  String pickupAddress = "";
-
-  // TODO:
-  // Replace the above value with the address received
-  // from the map/reverse-geocoding API later.
-
-  // ============================================================
-  // FUTURE MAP DATA
-  // ============================================================
-
+  GoogleMapController? _googleMapController;
+  LatLng currentCenter = LocationService.defaultLocation;
+  String pickupAddress = "Locating pickup point...";
   double? pickupLatitude;
   double? pickupLongitude;
+  bool isGeocoding = false;
 
-  // TODO:
-  // These values will come from the map/location API later.
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialAddress != null && widget.initialAddress!.isNotEmpty) {
+      pickupAddress = widget.initialAddress!;
+    }
+    if (widget.initialLocation != null && widget.initialLocation is LatLng) {
+      currentCenter = widget.initialLocation as LatLng;
+      pickupLatitude = currentCenter.latitude;
+      pickupLongitude = currentCenter.longitude;
+    } else {
+      _initLocation();
+    }
+  }
+
+  Future<void> _initLocation() async {
+    final pos = await LocationService.getCurrentLocation();
+    if (!mounted) return;
+    setState(() {
+      currentCenter = pos;
+      pickupLatitude = pos.latitude;
+      pickupLongitude = pos.longitude;
+    });
+    _googleMapController?.animateCamera(
+      CameraUpdate.newLatLngZoom(pos, 16.0),
+    );
+    _reverseGeocode(pos.latitude, pos.longitude);
+  }
+
+  Future<void> _reverseGeocode(double lat, double lng) async {
+    setState(() => isGeocoding = true);
+    final addr = await LocationService.getAddressFromCoordinates(lat, lng);
+    if (!mounted) return;
+    setState(() {
+      pickupAddress = addr;
+      isGeocoding = false;
+    });
+  }
 
   @override
   void dispose() {
@@ -238,20 +273,39 @@ class _PickupMapScreenState extends State<PickupMapScreen> {
                         child: Center(
                           child: SizedBox(
                             width: contentMaxWidth,
-                            child: Container(
-                              color: const Color(0xFFF2F2F2),
-
-                              child: Image.asset(
-                                "assets/maps.png",
-                                width: contentMaxWidth,
-                                height: double.infinity,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return Container(
-                                    color: const Color(0xFFE8E8E8),
-                                  );
-                                },
-                              ),
+                            child: Stack(
+                              children: [
+                                GoogleMap(
+                                  initialCameraPosition: CameraPosition(
+                                    target: currentCenter,
+                                    zoom: 16.0,
+                                  ),
+                                  onMapCreated: (controller) => _googleMapController = controller,
+                                  onCameraMove: (position) {
+                                    pickupLatitude = position.target.latitude;
+                                    pickupLongitude = position.target.longitude;
+                                  },
+                                  onCameraIdle: () {
+                                    if (pickupLatitude != null && pickupLongitude != null) {
+                                      _reverseGeocode(pickupLatitude!, pickupLongitude!);
+                                    }
+                                  },
+                                  myLocationEnabled: true,
+                                  myLocationButtonEnabled: false,
+                                  zoomControlsEnabled: false,
+                                ),
+                                // Stationary center pin
+                                const Center(
+                                  child: Padding(
+                                    padding: EdgeInsets.only(bottom: 22),
+                                    child: Icon(
+                                      Icons.location_pin,
+                                      size: 34,
+                                      color: Colors.green,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -470,7 +524,11 @@ class _PickupMapScreenState extends State<PickupMapScreen> {
                                               "$pickupLongitude",
                                         );
 
-                                        Navigator.pop(context, true);
+                                        Navigator.pop(context, {
+                                          'address': pickupAddress,
+                                          'lat': pickupLatitude ?? currentCenter.latitude,
+                                          'lng': pickupLongitude ?? currentCenter.longitude,
+                                        });
                                       },
 
                                       style: ElevatedButton.styleFrom(

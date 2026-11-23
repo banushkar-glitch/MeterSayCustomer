@@ -1,10 +1,21 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:metersay_app/rides/pickupmaplocation.dart';
 import 'package:metersay_app/rides/destinationmaplocation.dart';
+import 'package:metersay_app/rides/bookride.dart';
 import 'package:metersay_app/sliders/customermenu.dart';
+import 'package:metersay_app/services/location_service.dart';
 
 class PickupDropLocation extends StatefulWidget {
-  const PickupDropLocation({Key? key}) : super(key: key);
+  final String? initialPickupAddress;
+  final dynamic initialPickupLocation;
+
+  const PickupDropLocation({
+    Key? key,
+    this.initialPickupAddress,
+    this.initialPickupLocation,
+  }) : super(key: key);
 
   @override
   State<PickupDropLocation> createState() => _PickupDropLocationState();
@@ -17,12 +28,36 @@ class _PickupDropLocationState extends State<PickupDropLocation> {
 
   bool isMenuOpen = false;
 
-
   final TextEditingController pickupController =
   TextEditingController();
 
   final TextEditingController dropController =
   TextEditingController();
+
+  // Search & coordinates state
+  Timer? _searchDebounce;
+  List<LocationResult> _pickupSearchResults = [];
+  List<LocationResult> _dropSearchResults = [];
+  bool _isSearching = false;
+  double? selectedPickupLat;
+  double? selectedPickupLng;
+  double? selectedDropLat;
+  double? selectedDropLng;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialPickupAddress != null && widget.initialPickupAddress!.isNotEmpty) {
+      pickupController.text = widget.initialPickupAddress!;
+      isPickupActive = false;
+    } else {
+      isPickupActive = true;
+    }
+    if (widget.initialPickupLocation != null && widget.initialPickupLocation is LatLng) {
+      selectedPickupLat = (widget.initialPickupLocation as LatLng).latitude;
+      selectedPickupLng = (widget.initialPickupLocation as LatLng).longitude;
+    }
+  }
 
   // ============================================================
   // FOCUS NODES
@@ -62,6 +97,7 @@ class _PickupDropLocationState extends State<PickupDropLocation> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     pickupController.dispose();
     dropController.dispose();
 
@@ -115,8 +151,18 @@ class _PickupDropLocationState extends State<PickupDropLocation> {
         final double titleSize =
         isDesktop ? 28 : 20;
 
-        return Scaffold(
-          backgroundColor: Colors.white,
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, result) {
+            if (didPop) return;
+            Navigator.pop(context, {
+              'pickupAddress': pickupController.text,
+              'pickupLat': selectedPickupLat,
+              'pickupLng': selectedPickupLng,
+            });
+          },
+          child: Scaffold(
+            backgroundColor: Colors.white,
 
           // Keeps header/footer in their positions
           // when the keyboard opens.
@@ -367,6 +413,23 @@ class _PickupDropLocationState extends State<PickupDropLocation> {
                                                   setState(() {
                                                     isPickupActive = true;
                                                   });
+                                                  _searchDebounce?.cancel();
+                                                  if (value.trim().length >= 3) {
+                                                    _searchDebounce = Timer(const Duration(milliseconds: 350), () async {
+                                                      setState(() => _isSearching = true);
+                                                      final results = await LocationService.searchLocations(value.trim());
+                                                      if (mounted) {
+                                                        setState(() {
+                                                          _pickupSearchResults = results;
+                                                          _isSearching = false;
+                                                        });
+                                                      }
+                                                    });
+                                                  } else {
+                                                    setState(() {
+                                                      _pickupSearchResults = [];
+                                                    });
+                                                  }
                                                 },
 
                                                 decoration: const InputDecoration(
@@ -472,6 +535,23 @@ class _PickupDropLocationState extends State<PickupDropLocation> {
                                                   setState(() {
                                                     isPickupActive = false;
                                                   });
+                                                  _searchDebounce?.cancel();
+                                                  if (value.trim().length >= 3) {
+                                                    _searchDebounce = Timer(const Duration(milliseconds: 350), () async {
+                                                      setState(() => _isSearching = true);
+                                                      final results = await LocationService.searchLocations(value.trim());
+                                                      if (mounted) {
+                                                        setState(() {
+                                                          _dropSearchResults = results;
+                                                          _isSearching = false;
+                                                        });
+                                                      }
+                                                    });
+                                                  } else {
+                                                    setState(() {
+                                                      _dropSearchResults = [];
+                                                    });
+                                                  }
                                                 },
 
                                                 decoration: const InputDecoration(
@@ -515,11 +595,24 @@ class _PickupDropLocationState extends State<PickupDropLocation> {
                                       Navigator.push(
                                         context,
                                         MaterialPageRoute(
-                                          builder: (context) => const PickupMapScreen(),
+                                          builder: (context) => PickupMapScreen(
+                                            initialAddress: pickupController.text,
+                                            initialLocation: widget.initialPickupLocation,
+                                          ),
                                         ),
                                       ).then((result) {
-                                        if (result == true) {
+                                        if (result is Map) {
                                           setState(() {
+                                            if (result['address'] != null) {
+                                              pickupController.text = result['address'];
+                                            }
+                                            if (result['lat'] != null) {
+                                              selectedPickupLat = result['lat'];
+                                            }
+                                            if (result['lng'] != null) {
+                                              selectedPickupLng = result['lng'];
+                                            }
+                                            _pickupSearchResults = [];
                                             isPickupActive = false;
                                           });
 
@@ -532,11 +625,27 @@ class _PickupDropLocationState extends State<PickupDropLocation> {
                                       });
                                     } else if (isPickupActive == false) {
                                       Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) => const DestinationMapScreen(),
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => DestinationMapScreen(
+                                            pickupAddress: pickupController.text,
+                                            pickupLatitude: selectedPickupLat,
+                                            pickupLongitude: selectedPickupLng,
+                                            initialDropAddress: dropController.text,
+                                            initialDropLatitude: selectedDropLat,
+                                            initialDropLongitude: selectedDropLng,
                                           ),
-                                       );
+                                        ),
+                                      ).then((result) {
+                                        if (result is Map) {
+                                          setState(() {
+                                            if (result['address'] != null) dropController.text = result['address'];
+                                            if (result['lat'] != null) selectedDropLat = result['lat'];
+                                            if (result['lng'] != null) selectedDropLng = result['lng'];
+                                            _dropSearchResults = [];
+                                          });
+                                        }
+                                      });
                                     } else {
                                       // Nothing selected → do nothing
                                       }
@@ -578,24 +687,86 @@ class _PickupDropLocationState extends State<PickupDropLocation> {
 
 
                             // ==================================================
-                            // RECENT LOCATION LIST
+                            // RECENT LOCATION / SEARCH RESULTS LIST
                             // ==================================================
 
-                            ...(
-                                isPickupActive == true
-                                    ? pickupRecentLocations
-                                    : isPickupActive == false
-                                    ? dropRecentLocations
-                                    : <String>[]
-                            ).map(
-                                  (location) {
+                            if (_isSearching)
+                              const Padding(
+                                padding: EdgeInsets.all(20),
+                                child: Center(
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Color(0xFFFFD329),
+                                  ),
+                                ),
+                              )
+                            else if (isPickupActive == true && _pickupSearchResults.isNotEmpty)
+                              ..._pickupSearchResults.map(
+                                (result) {
+                                  return _searchResultTile(
+                                    result: result,
+                                    isDesktop: isDesktop,
+                                    onTap: () {
+                                      setState(() {
+                                        pickupController.text = result.shortName;
+                                        selectedPickupLat = result.latitude;
+                                        selectedPickupLng = result.longitude;
+                                        _pickupSearchResults = [];
+                                        isPickupActive = false;
+                                      });
+                                      dropFocusNode.requestFocus();
+                                    },
+                                  );
+                                },
+                              )
+                            else if (isPickupActive == false && _dropSearchResults.isNotEmpty)
+                              ..._dropSearchResults.map(
+                                (result) {
+                                  return _searchResultTile(
+                                    result: result,
+                                    isDesktop: isDesktop,
+                                    onTap: () {
+                                      setState(() {
+                                        dropController.text = result.shortName;
+                                        selectedDropLat = result.latitude;
+                                        selectedDropLng = result.longitude;
+                                        _dropSearchResults = [];
+                                      });
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => BookRideScreen(
+                                            pickupAddress: pickupController.text.isNotEmpty
+                                                ? pickupController.text
+                                                : "Current location",
+                                            pickupLatitude: selectedPickupLat,
+                                            pickupLongitude: selectedPickupLng,
+                                            destinationAddress: dropController.text,
+                                            destinationLatitude: selectedDropLat,
+                                            destinationLongitude: selectedDropLng,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  );
+                                },
+                              )
+                            else
+                              ...(
+                                  isPickupActive == true
+                                      ? pickupRecentLocations
+                                      : isPickupActive == false
+                                      ? dropRecentLocations
+                                      : <String>[]
+                              ).map(
+                                    (location) {
 
-                                return _recentLocationTile(
-                                  location: location,
-                                  isDesktop: isDesktop,
-                                );
-                              },
-                            ),
+                                  return _recentLocationTile(
+                                    location: location,
+                                    isDesktop: isDesktop,
+                                  );
+                                },
+                              ),
 
                             const SizedBox(height: 25),
                           ],
@@ -638,6 +809,7 @@ class _PickupDropLocationState extends State<PickupDropLocation> {
                   },
                 ),
             ],
+        ),
         ),
         );
       },
@@ -745,6 +917,73 @@ class _PickupDropLocationState extends State<PickupDropLocation> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // SEARCH RESULT TILE
+  // ============================================================
+
+  Widget _searchResultTile({
+    required LocationResult result,
+    required bool isDesktop,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 2),
+        child: Column(
+          children: [
+            SizedBox(
+              height: isDesktop ? 54 : 50,
+              child: Row(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(left: 5, right: 12),
+                    child: Icon(
+                      Icons.location_on_outlined,
+                      color: const Color(0xFFFFD329),
+                      size: isDesktop ? 24 : 22,
+                    ),
+                  ),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          result.shortName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: "InriaSerif",
+                            fontSize: isDesktop ? 16 : 15,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black,
+                          ),
+                        ),
+                        Text(
+                          result.displayName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: "InriaSerif",
+                            fontSize: isDesktop ? 12 : 11,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1, color: Color(0xFFF0F0F0)),
+          ],
+        ),
       ),
     );
   }

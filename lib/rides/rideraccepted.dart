@@ -1,9 +1,47 @@
+import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:metersay_app/rides/activeride.dart';
+import 'package:metersay_app/rides/mapscreen.dart';
 import 'package:metersay_app/sliders/customermenu.dart';
+import 'package:metersay_app/sliders/rejectslider.dart';
+import 'package:metersay_app/services/location_service.dart';
+import 'package:metersay_app/services/ride_service.dart';
 
 class RiderAccepted extends StatefulWidget {
-  const RiderAccepted({super.key});
+  final int? rideId;
+  final String? driverName;
+  final String? driverPhoneNumber;
+  final String? autoNumber;
+  final String? autoModel;
+  final double? driverLatitude;
+  final double? driverLongitude;
+  final String? pickupAddress;
+  final double? pickupLatitude;
+  final double? pickupLongitude;
+  final String? dropAddress;
+  final double? dropLatitude;
+  final double? dropLongitude;
+  final String? otp;
+
+  const RiderAccepted({
+    super.key,
+    this.rideId,
+    this.driverName,
+    this.driverPhoneNumber,
+    this.autoNumber,
+    this.autoModel,
+    this.driverLatitude,
+    this.driverLongitude,
+    this.pickupAddress,
+    this.pickupLatitude,
+    this.pickupLongitude,
+    this.dropAddress,
+    this.dropLatitude,
+    this.dropLongitude,
+    this.otp,
+  });
 
   static const Color yellow = Color(0xFFFFD329);
   static const Color dark = Color(0xFF3C3A3A);
@@ -15,6 +53,191 @@ class RiderAccepted extends StatefulWidget {
 class _RiderAcceptedState extends State<RiderAccepted> {
 
   bool isMenuOpen = false;
+  GoogleMapController? _googleMapController;
+  final RideService _rideService = RideService();
+  BitmapDescriptor _pickupMarkerIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen);
+  BitmapDescriptor _autoMarkerIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueYellow);
+  List<LatLng> _routePoints = [];
+
+  Timer? _pollingTimer;
+  String? _currentOtp;
+  bool _isDriverArrived = false;
+  String _arrivalBannerText = 'Driver is on the way to pickup';
+  double? _driverLat;
+  double? _driverLng;
+
+  @override
+  void initState() {
+    super.initState();
+    _driverLat = widget.driverLatitude;
+    _driverLng = widget.driverLongitude;
+    // OTP will only be populated dynamically when driver arrives
+    _currentOtp = widget.otp;
+    _loadMarkerIcons();
+    _fetchRoute();
+    _startArrivalPolling();
+  }
+
+  Future<void> _loadMarkerIcons() async {
+    final pickup = await LocationService.getPickupMarkerIcon();
+    final auto = await LocationService.getAutoMarkerIcon();
+    if (!mounted) return;
+    setState(() {
+      _pickupMarkerIcon = pickup;
+      _autoMarkerIcon = auto;
+    });
+  }
+
+  Future<void> _fetchRoute() async {
+    final curDriverLat = _driverLat ?? widget.driverLatitude;
+    final curDriverLng = _driverLng ?? widget.driverLongitude;
+    if (curDriverLat != null && curDriverLng != null &&
+        widget.pickupLatitude != null && widget.pickupLongitude != null) {
+      final start = LatLng(curDriverLat, curDriverLng);
+      final end = LatLng(widget.pickupLatitude!, widget.pickupLongitude!);
+      final details = await LocationService.getShortestRoute(start, end);
+      if (!mounted) return;
+      setState(() {
+        _routePoints = details.polylinePoints;
+      });
+      _fitRouteBounds();
+    }
+  }
+
+  void _fitRouteBounds() {
+    final curDriverLat = _driverLat ?? widget.driverLatitude;
+    final curDriverLng = _driverLng ?? widget.driverLongitude;
+    if (curDriverLat != null && curDriverLng != null &&
+        widget.pickupLatitude != null && widget.pickupLongitude != null &&
+        _googleMapController != null) {
+      final double minLat = min(curDriverLat, widget.pickupLatitude!);
+      final double maxLat = max(curDriverLat, widget.pickupLatitude!);
+      final double minLng = min(curDriverLng, widget.pickupLongitude!);
+      final double maxLng = max(curDriverLng, widget.pickupLongitude!);
+
+      _googleMapController!.animateCamera(
+        CameraUpdate.newLatLngBounds(
+          LatLngBounds(
+            southwest: LatLng(minLat, minLng),
+            northeast: LatLng(maxLat, maxLng),
+          ),
+          70,
+        ),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _pollingTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startArrivalPolling() {
+    _pollingTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+      if (!mounted) return;
+
+      Map<String, dynamic> response;
+      if (widget.rideId != null) {
+        response = await _rideService.getRideDetails(widget.rideId!);
+      } else {
+        response = await _rideService.getActiveRide();
+      }
+
+      if (!mounted) return;
+
+      if (response['success'] == true) {
+        final data = response['data'] ?? {};
+        final String? status = data['status'];
+
+        // Live driver coordinates update
+        if (data['driverLatitude'] != null && data['driverLongitude'] != null) {
+          final double newLat = (data['driverLatitude'] as num).toDouble();
+          final double newLng = (data['driverLongitude'] as num).toDouble();
+          if (_driverLat != newLat || _driverLng != newLng) {
+            setState(() {
+              _driverLat = newLat;
+              _driverLng = newLng;
+            });
+          }
+        }
+
+        if (status == 'DRIVER_ARRIVED' || status == 'ARRIVED') {
+          if (!_isDriverArrived) {
+            setState(() {
+              _isDriverArrived = true;
+              _arrivalBannerText = 'Driver has arrived at pickup!';
+            });
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Auto driver has arrived at pickup! Share OTP with driver.'),
+                backgroundColor: Colors.green,
+                duration: Duration(seconds: 4),
+              ),
+            );
+          }
+
+          // Dynamically obtain and display OTP upon arrival
+          if (data['otp'] != null && data['otp'].toString().isNotEmpty && _currentOtp != data['otp'].toString()) {
+            setState(() {
+              _currentOtp = data['otp'].toString();
+            });
+          }
+        } else if (status == 'DRIVER_ACCEPTED' || status == 'ACCEPTED' || status == 'DRIVER_ASSIGNED' || status == 'DRIVER_ARRIVING') {
+          if (_arrivalBannerText != 'Driver is on the way to pickup') {
+            setState(() {
+              _arrivalBannerText = 'Driver is on the way to pickup';
+            });
+          }
+        } else if (status == 'RIDE_STARTED' || status == 'IN_PROGRESS' || status == 'STARTED') {
+          _pollingTimer?.cancel();
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Ride started! Fare will be calculated on driver\'s meter.'),
+              backgroundColor: Colors.green,
+            ),
+          );
+
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ActiveRideScreen(
+                rideId: widget.rideId,
+                driverName: widget.driverName,
+                driverPhoneNumber: widget.driverPhoneNumber,
+                autoNumber: widget.autoNumber,
+                autoModel: widget.autoModel,
+                driverLatitude: _driverLat ?? widget.driverLatitude,
+                driverLongitude: _driverLng ?? widget.driverLongitude,
+                pickupAddress: widget.pickupAddress,
+                pickupLatitude: widget.pickupLatitude,
+                pickupLongitude: widget.pickupLongitude,
+                dropAddress: widget.dropAddress,
+                dropLatitude: widget.dropLatitude,
+                dropLongitude: widget.dropLongitude,
+              ),
+            ),
+          );
+        } else if (status == 'CANCELLED' || status == 'cancelled') {
+          _pollingTimer?.cancel();
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Ride has been cancelled.'),
+              backgroundColor: Colors.black87,
+            ),
+          );
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (context) => const MappingScreen()),
+            (route) => false,
+          );
+        }
+      }
+    });
+  }
 
 
 
@@ -68,12 +291,52 @@ class _RiderAcceptedState extends State<RiderAccepted> {
                       width: contentMaxWidth,
                       height: double.infinity,
 
-                      child: Image.asset(
-                        'assets/maps.png',
-                        width: contentMaxWidth,
-                        height: double.infinity,
-                        fit: BoxFit.cover,
-                        alignment: Alignment.center,
+                      child: GoogleMap(
+                        initialCameraPosition: CameraPosition(
+                          target: (_driverLat != null && _driverLng != null)
+                              ? LatLng(_driverLat!, _driverLng!)
+                              : (widget.pickupLatitude != null && widget.pickupLongitude != null
+                                  ? LatLng(widget.pickupLatitude!, widget.pickupLongitude!)
+                                  : LocationService.defaultLocation),
+                          zoom: 15.0,
+                        ),
+                        onMapCreated: (controller) {
+                          _googleMapController = controller;
+                          _fitRouteBounds();
+                        },
+                        myLocationEnabled: false,
+                        myLocationButtonEnabled: false,
+                        zoomControlsEnabled: false,
+                        mapToolbarEnabled: false,
+                        markers: {
+                          if (widget.pickupLatitude != null && widget.pickupLongitude != null)
+                            Marker(
+                              markerId: const MarkerId('pickup'),
+                              position: LatLng(widget.pickupLatitude!, widget.pickupLongitude!),
+                              icon: _pickupMarkerIcon,
+                              anchor: const Offset(0.5, 1.0),
+                              infoWindow: InfoWindow(title: 'Pickup: ${widget.pickupAddress ?? "Your Pickup"}'),
+                            ),
+                          if (_driverLat != null && _driverLng != null)
+                            Marker(
+                              markerId: const MarkerId('driver'),
+                              position: LatLng(_driverLat!, _driverLng!),
+                              icon: _autoMarkerIcon,
+                              anchor: const Offset(0.5, 0.5),
+                              infoWindow: InfoWindow(
+                                title: 'Auto: ${widget.driverName ?? "Driver"} (${widget.autoNumber ?? ""})',
+                              ),
+                            ),
+                        },
+                        polylines: {
+                          if (_routePoints.isNotEmpty)
+                            Polyline(
+                              polylineId: const PolylineId('driver_to_pickup'),
+                              points: _routePoints,
+                              width: 5,
+                              color: const Color(0xFFFFD329),
+                            ),
+                        },
                       ),
                     ),
                   ),
@@ -174,6 +437,13 @@ class _RiderAcceptedState extends State<RiderAccepted> {
                       child: _RideDetailsSheet(
                         screenWidth: screenWidth,
                         screenHeight: screenHeight,
+                        driverName: widget.driverName,
+                        autoNumber: widget.autoNumber,
+                        autoModel: widget.autoModel,
+                        driverPhoneNumber: widget.driverPhoneNumber,
+                        otp: _currentOtp,
+                        arrivalMessage: _arrivalBannerText,
+                        isDriverArrived: _isDriverArrived,
                       ),
                     ),
                   ),
@@ -191,6 +461,7 @@ class _RiderAcceptedState extends State<RiderAccepted> {
                     color: RiderAccepted.dark,
                     child: _CancelWarning(
                       screenWidth: screenWidth,
+                      rideId: widget.rideId,
                     ),
                   ),
                 ),
@@ -219,13 +490,25 @@ class _RiderAcceptedState extends State<RiderAccepted> {
 class _RideDetailsSheet extends StatelessWidget {
   final double screenWidth;
   final double screenHeight;
+  final String? driverName;
+  final String? autoNumber;
+  final String? autoModel;
+  final String? driverPhoneNumber;
+  final String? otp;
+  final String arrivalMessage;
+  final bool isDriverArrived;
 
   const _RideDetailsSheet({
     required this.screenWidth,
     required this.screenHeight,
+    this.driverName,
+    this.autoNumber,
+    this.autoModel,
+    this.driverPhoneNumber,
+    this.otp,
+    required this.arrivalMessage,
+    required this.isDriverArrived,
   });
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -238,8 +521,8 @@ class _RideDetailsSheet extends StatelessWidget {
         ? 16
         : (screenWidth * 0.047).clamp(15.0, 20.0);
 
-    final double otpTextSize =
-    screenWidth > 700 ? 28 : (screenWidth * 0.065).clamp(23.0, 29.0);
+    final String otpStr = (otp != null && otp!.trim().isNotEmpty) ? otp!.trim() : '----';
+    final List<String> digits = otpStr.split('');
 
     return Container(
       width: double.infinity,
@@ -272,13 +555,13 @@ class _RideDetailsSheet extends StatelessWidget {
               // ============================================================
 
               Text(
-                'Driver arrives in 5 minutes',
+                arrivalMessage,
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontFamily: 'Inria Serif',
                   fontSize: titleSize,
-                  fontWeight: FontWeight.w400,
-                  color: Colors.black,
+                  fontWeight: isDriverArrived ? FontWeight.w600 : FontWeight.w400,
+                  color: isDriverArrived ? const Color(0xFF16B957) : Colors.black,
                 ),
               ),
 
@@ -289,10 +572,6 @@ class _RideDetailsSheet extends StatelessWidget {
               // ============================================================
               // OTP
               // ============================================================
-
-              // ============================================================
-// SMALLER YELLOW OTP CONTAINER
-// ============================================================
 
               Center(
                 child: ConstrainedBox(
@@ -343,53 +622,17 @@ class _RideDetailsSheet extends StatelessWidget {
 
                         const Spacer(),
 
-                        // ==================================================
-                        // OTP BOX 1
-                        // ==================================================
-
-                        _OtpBox(
-                          value: '5',
-                          size: screenWidth,
-                        ),
-
-                        SizedBox(
-                          width: screenWidth > 700 ? 8 : 8,
-                        ),
-
-                        // ==================================================
-                        // OTP BOX 2
-                        // ==================================================
-
-                        _OtpBox(
-                          value: '5',
-                          size: screenWidth,
-                        ),
-
-                        SizedBox(
-                          width: screenWidth > 700 ? 8 : 8,
-                        ),
-
-                        // ==================================================
-                        // OTP BOX 3
-                        // ==================================================
-
-                        _OtpBox(
-                          value: '5',
-                          size: screenWidth,
-                        ),
-
-                        SizedBox(
-                          width: screenWidth > 700 ? 8 : 8,
-                        ),
-
-                        // ==================================================
-                        // OTP BOX 4
-                        // ==================================================
-
-                        _OtpBox(
-                          value: '5',
-                          size: screenWidth,
-                        ),
+                        // Dynamic 6-digit OTP boxes
+                        for (int i = 0; i < digits.length; i++) ...[
+                          if (i > 0)
+                            SizedBox(
+                              width: screenWidth > 700 ? 8 : 5,
+                            ),
+                          _OtpBox(
+                            value: digits[i],
+                            size: screenWidth,
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -407,6 +650,10 @@ class _RideDetailsSheet extends StatelessWidget {
               _DriverCard(
                 screenWidth: screenWidth,
                 screenHeight: screenHeight,
+                driverName: driverName ?? 'Mahesh Jagtap',
+                autoNumber: autoNumber ?? 'MH 12 AA 1234',
+                autoModel: autoModel ?? 'Auto Rickshaw',
+                driverPhoneNumber: driverPhoneNumber,
               ),
             ],
           ),
@@ -428,12 +675,12 @@ class _OtpBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final double boxSize = size > 700
-        ? 40
-        : (size * 0.058).clamp(32.0, 40.0);
+        ? 38
+        : (size * 0.052).clamp(28.0, 36.0);
 
     final double digitSize = size > 700
-        ? 19
-        : (size * 0.040).clamp(16.0, 19.0);
+        ? 18
+        : (size * 0.038).clamp(15.0, 18.0);
 
     return SizedBox(
       width: boxSize,
@@ -469,10 +716,18 @@ class _OtpBox extends StatelessWidget {
 class _DriverCard extends StatelessWidget {
   final double screenWidth;
   final double screenHeight;
+  final String driverName;
+  final String autoNumber;
+  final String autoModel;
+  final String? driverPhoneNumber;
 
   const _DriverCard({
     required this.screenWidth,
     required this.screenHeight,
+    required this.driverName,
+    required this.autoNumber,
+    required this.autoModel,
+    this.driverPhoneNumber,
   });
 
   @override
@@ -562,7 +817,7 @@ class _DriverCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Name : Mahesh Jagtap',
+                        'Name : $driverName',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -574,7 +829,7 @@ class _DriverCard extends StatelessWidget {
                       const SizedBox(height: 2),
 
                       Text(
-                        'Vh no : MH 12 AA 1234',
+                        'Vh no : $autoNumber',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -687,9 +942,11 @@ class _ActionButton extends StatelessWidget {
 
 class _CancelWarning extends StatelessWidget {
   final double screenWidth;
+  final int? rideId;
 
   const _CancelWarning({
     required this.screenWidth,
+    this.rideId,
   });
 
   @override
@@ -808,10 +1065,10 @@ class _CancelWarning extends StatelessWidget {
 
                   child: TextButton(
                     onPressed: () {
-                      // ==================================================
-                      // TODO:
-                      // Add cancel ride API / confirmation dialog later.
-                      // ==================================================
+                      CancelRideSheet.show(
+                        context,
+                        rideId: rideId,
+                      );
                     },
 
                     style: TextButton.styleFrom(

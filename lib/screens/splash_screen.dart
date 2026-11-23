@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'createaccount_screen.dart';
+import '../rides/mapscreen.dart';
+import '../services/auth_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -15,12 +17,25 @@ class _SplashScreenState extends State<SplashScreen> {
   void initState() {
     super.initState();
 
-    // auto move to login after 3 sec
-    Timer(Duration(seconds: 4), () {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => HomeScreen()),
-      );
+    // Check login session after 4 seconds
+    Timer(const Duration(seconds: 4), () async {
+      if (!mounted) return;
+
+      final bool loggedIn = await AuthService().isLoggedIn();
+
+      if (!mounted) return;
+
+      if (loggedIn) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const MappingScreen()),
+        );
+      } else {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const HomeScreen()),
+        );
+      }
     });
   }
 

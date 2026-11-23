@@ -84,5 +84,14 @@ public class AuthService {
                 .message("Login successful")
                 .build();
     }
+
+    @Transactional
+    public void resetPassword(String phoneNumber, String newPassword) {
+        String phone = phoneNumber.trim();
+        User user = userRepository.findByPhoneNumber(phone)
+                .orElseThrow(() -> new BadCredentialsException("User not found with phone: " + phone));
+        user.setPassword(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+    }
 }
 

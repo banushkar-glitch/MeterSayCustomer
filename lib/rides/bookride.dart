@@ -1,9 +1,29 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:metersay_app/rides/locatingdriver.dart';
 import 'package:metersay_app/sliders/customermenu.dart';
 import 'package:metersay_app/sliders/rejectslider.dart';
+import 'package:metersay_app/services/location_service.dart';
+import 'package:metersay_app/services/ride_service.dart';
+
 class BookRideScreen extends StatefulWidget {
-  const BookRideScreen({super.key});
+  final String? pickupAddress;
+  final double? pickupLatitude;
+  final double? pickupLongitude;
+  final String? destinationAddress;
+  final double? destinationLatitude;
+  final double? destinationLongitude;
+
+  const BookRideScreen({
+    super.key,
+    this.pickupAddress,
+    this.pickupLatitude,
+    this.pickupLongitude,
+    this.destinationAddress,
+    this.destinationLatitude,
+    this.destinationLongitude,
+  });
 
   @override
   State<BookRideScreen> createState() => _BookRideScreenState();
@@ -12,6 +32,27 @@ class BookRideScreen extends StatefulWidget {
 class _BookRideScreenState extends State<BookRideScreen> {
 
   bool isMenuOpen = false;
+  bool isConfirmed = false;
+  bool _isBooking = false;
+  final RideService _rideService = RideService();
+
+  bool get isValidTrip =>
+      pickupLatitude != null &&
+      pickupLongitude != null &&
+      destinationLatitude != null &&
+      destinationLongitude != null &&
+      pickupAddress.isNotEmpty &&
+      pickupAddress != "Current location" &&
+      destinationAddress.isNotEmpty &&
+      destinationAddress != "Drop off Location";
+
+  GoogleMapController? _googleMapController;
+  List<LatLng> _routePoints = [];
+  bool _isLoadingRoute = true;
+  String _distanceText = '';
+  String _durationText = '';
+  BitmapDescriptor _pickupMarkerIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen);
+  BitmapDescriptor _destinationMarkerIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed);
 
   // ============================================================
   // API-READY DATA
@@ -25,6 +66,70 @@ class _BookRideScreenState extends State<BookRideScreen> {
 
   double? destinationLatitude;
   double? destinationLongitude;
+
+  @override
+  void initState() {
+    super.initState();
+    pickupAddress = widget.pickupAddress ?? "Current location";
+    destinationAddress = widget.destinationAddress ?? "Drop off Location";
+    pickupLatitude = widget.pickupLatitude;
+    pickupLongitude = widget.pickupLongitude;
+    destinationLatitude = widget.destinationLatitude;
+    destinationLongitude = widget.destinationLongitude;
+    _loadMarkerIcons();
+    _fetchDrivingRoute();
+  }
+
+  Future<void> _loadMarkerIcons() async {
+    final pickup = await LocationService.getPickupMarkerIcon();
+    final dest = await LocationService.getDestinationMarkerIcon();
+    if (!mounted) return;
+    setState(() {
+      _pickupMarkerIcon = pickup;
+      _destinationMarkerIcon = dest;
+    });
+  }
+
+  Future<void> _fetchDrivingRoute() async {
+    if (pickupLatitude != null && pickupLongitude != null &&
+        destinationLatitude != null && destinationLongitude != null) {
+      final start = LatLng(pickupLatitude!, pickupLongitude!);
+      final end = LatLng(destinationLatitude!, destinationLongitude!);
+      final routeDetails = await LocationService.getShortestRoute(start, end);
+      if (!mounted) return;
+      setState(() {
+        _routePoints = routeDetails.polylinePoints;
+        _distanceText = routeDetails.distanceText;
+        _durationText = routeDetails.durationText;
+        _isLoadingRoute = false;
+      });
+      _fitRouteBounds();
+    } else {
+      if (!mounted) return;
+      setState(() => _isLoadingRoute = false);
+    }
+  }
+
+  void _fitRouteBounds() {
+    if (pickupLatitude != null && pickupLongitude != null &&
+        destinationLatitude != null && destinationLongitude != null &&
+        _googleMapController != null) {
+      final double minLat = min(pickupLatitude!, destinationLatitude!);
+      final double maxLat = max(pickupLatitude!, destinationLatitude!);
+      final double minLng = min(pickupLongitude!, destinationLongitude!);
+      final double maxLng = max(pickupLongitude!, destinationLongitude!);
+
+      _googleMapController!.animateCamera(
+        CameraUpdate.newLatLngBounds(
+          LatLngBounds(
+            southwest: LatLng(minLat, minLng),
+            northeast: LatLng(maxLat, maxLng),
+          ),
+          70,
+        ),
+      );
+    }
+  }
 
   // ============================================================
   // RESPONSIVE HELPERS
@@ -232,24 +337,104 @@ class _BookRideScreenState extends State<BookRideScreen> {
                   // ==================================================
 
                   Positioned.fill(
-                    child: ClipRect(
-                      child: SizedBox(
-                        width: double.infinity,
-                        height: double.infinity,
+                    child: GoogleMap(
+                      initialCameraPosition: CameraPosition(
+                        target: pickupLatitude != null && pickupLongitude != null
+                            ? LatLng(pickupLatitude!, pickupLongitude!)
+                            : LocationService.defaultLocation,
+                        zoom: 14.0,
+                      ),
+                      onMapCreated: (controller) {
+                        _googleMapController = controller;
+                        _fitRouteBounds();
+                      },
+                      myLocationEnabled: false,
+                      myLocationButtonEnabled: false,
+                      zoomControlsEnabled: false,
+                      mapToolbarEnabled: false,
+                      markers: {
+                        if (pickupLatitude != null && pickupLongitude != null)
+                          Marker(
+                            markerId: const MarkerId('pickup'),
+                            position: LatLng(pickupLatitude!, pickupLongitude!),
+                            infoWindow: InfoWindow(title: 'Pickup: ${pickupAddress.isNotEmpty ? pickupAddress : "Current Location"}'),
+                            icon: _pickupMarkerIcon,
+                            anchor: const Offset(0.5, 1.0),
+                          ),
+                        if (destinationLatitude != null && destinationLongitude != null)
+                          Marker(
+                            markerId: const MarkerId('destination'),
+                            position: LatLng(destinationLatitude!, destinationLongitude!),
+                            infoWindow: InfoWindow(title: 'Destination: ${destinationAddress.isNotEmpty ? destinationAddress : "Drop Location"}'),
+                            icon: _destinationMarkerIcon,
+                            anchor: const Offset(0.5, 1.0),
+                          ),
+                      },
+                      polylines: {
+                        if (_routePoints.isNotEmpty)
+                          Polyline(
+                            polylineId: const PolylineId('route'),
+                            points: _routePoints,
+                            width: 5,
+                            color: const Color(0xFFFFD329),
+                          ),
+                      },
+                    ),
+                  ),
 
-                        child: Image.asset(
-                          "assets/maps.png",
-
-                          width: double.infinity,
-                          height: double.infinity,
-
-                          fit: BoxFit.cover,
-
-                          alignment: Alignment.center,
+                  // Route distance & time floating pill
+                  if (_distanceText.isNotEmpty)
+                    Positioned(
+                      top: 20,
+                      right: 20,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Colors.black26,
+                              blurRadius: 6,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.directions_car, color: Color(0xFFFFD329), size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              '$_distanceText${_durationText.isNotEmpty ? " • $_durationText" : ""}',
+                              style: const TextStyle(
+                                fontFamily: "InriaSerif",
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF3C3A3A),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
-                  ),
+
+                  if (_isLoadingRoute)
+                    const Positioned(
+                      top: 15,
+                      left: 0,
+                      right: 0,
+                      child: Center(
+                        child: SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Color(0xFFFFD329),
+                          ),
+                        ),
+                      ),
+                    ),
 
                   // ==================================================
                   // PART 3 → DRAGGABLE SHEET WILL COME HERE
@@ -333,62 +518,65 @@ class _BookRideScreenState extends State<BookRideScreen> {
                                     // CURRENT LOCATION
                                     // ==================================================
 
-                                    Container(
-                                      width: double.infinity,
-                                      height: isDesktop
-                                          ? 54
-                                          : isTablet
-                                          ? 50
-                                          : 48,
+                                    GestureDetector(
+                                      onTap: () => Navigator.pop(context),
+                                      child: Container(
+                                        width: double.infinity,
+                                        height: isDesktop
+                                            ? 54
+                                            : isTablet
+                                            ? 50
+                                            : 48,
 
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        border: Border.all(
-                                          color: Colors.black,
-                                          width: 1,
-                                        ),
-                                        borderRadius: BorderRadius.circular(20),
-                                      ),
-
-                                      child: Row(
-                                        children: [
-
-                                          Padding(
-                                            padding: const EdgeInsets.only(left: 12),
-                                            child: Icon(
-                                              Icons.location_on,
-                                              color: const Color(0xFF34A853),
-                                              size: isDesktop ? 29 : 26,
-                                            ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          border: Border.all(
+                                            color: Colors.black,
+                                            width: 1,
                                           ),
+                                          borderRadius: BorderRadius.circular(20),
+                                        ),
 
-                                          Expanded(
-                                            child: Padding(
-                                              padding: const EdgeInsets.symmetric(
-                                                horizontal: 12,
+                                        child: Row(
+                                          children: [
+
+                                            Padding(
+                                              padding: const EdgeInsets.only(left: 12),
+                                              child: Icon(
+                                                Icons.location_on,
+                                                color: const Color(0xFF34A853),
+                                                size: isDesktop ? 29 : 26,
                                               ),
+                                            ),
 
-                                              child: Text(
-                                                pickupAddress,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
+                                            Expanded(
+                                              child: Padding(
+                                                padding: const EdgeInsets.symmetric(
+                                                  horizontal: 12,
+                                                ),
 
-                                                style: TextStyle(
-                                                  fontFamily: "InriaSerif",
-                                                  fontSize: isDesktop
-                                                      ? 19
-                                                      : isTablet
-                                                      ? 18
-                                                      : 16,
+                                                child: Text(
+                                                  pickupAddress,
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
 
-                                                  fontWeight: FontWeight.w400,
-                                                  letterSpacing: -0.3,
-                                                  color: Colors.black,
+                                                  style: TextStyle(
+                                                    fontFamily: "InriaSerif",
+                                                    fontSize: isDesktop
+                                                        ? 19
+                                                        : isTablet
+                                                        ? 18
+                                                        : 16,
+
+                                                    fontWeight: FontWeight.w400,
+                                                    letterSpacing: -0.3,
+                                                    color: Colors.black,
+                                                  ),
                                                 ),
                                               ),
                                             ),
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
                                     ),
 
@@ -408,62 +596,65 @@ class _BookRideScreenState extends State<BookRideScreen> {
                                     // DROP OFF LOCATION
                                     // ==================================================
 
-                                    Container(
-                                      width: double.infinity,
-                                      height: isDesktop
-                                          ? 54
-                                          : isTablet
-                                          ? 50
-                                          : 48,
+                                    GestureDetector(
+                                      onTap: () => Navigator.pop(context),
+                                      child: Container(
+                                        width: double.infinity,
+                                        height: isDesktop
+                                            ? 54
+                                            : isTablet
+                                            ? 50
+                                            : 48,
 
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        border: Border.all(
-                                          color: Colors.black,
-                                          width: 1,
-                                        ),
-                                        borderRadius: BorderRadius.circular(20),
-                                      ),
-
-                                      child: Row(
-                                        children: [
-
-                                          Padding(
-                                            padding: const EdgeInsets.only(left: 12),
-                                            child: Icon(
-                                              Icons.location_on,
-                                              color: Colors.red,
-                                              size: isDesktop ? 29 : 26,
-                                            ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          border: Border.all(
+                                            color: Colors.black,
+                                            width: 1,
                                           ),
+                                          borderRadius: BorderRadius.circular(20),
+                                        ),
 
-                                          Expanded(
-                                            child: Padding(
-                                              padding: const EdgeInsets.symmetric(
-                                                horizontal: 12,
+                                        child: Row(
+                                          children: [
+
+                                            Padding(
+                                              padding: const EdgeInsets.only(left: 12),
+                                              child: Icon(
+                                                Icons.location_on,
+                                                color: Colors.red,
+                                                size: isDesktop ? 29 : 26,
                                               ),
+                                            ),
 
-                                              child: Text(
-                                                destinationAddress,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
+                                            Expanded(
+                                              child: Padding(
+                                                padding: const EdgeInsets.symmetric(
+                                                  horizontal: 12,
+                                                ),
 
-                                                style: TextStyle(
-                                                  fontFamily: "InriaSerif",
-                                                  fontSize: isDesktop
-                                                      ? 19
-                                                      : isTablet
-                                                      ? 18
-                                                      : 16,
+                                                child: Text(
+                                                  destinationAddress,
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
 
-                                                  fontWeight: FontWeight.w400,
-                                                  letterSpacing: -0.3,
-                                                  color: Colors.black,
+                                                  style: TextStyle(
+                                                    fontFamily: "InriaSerif",
+                                                    fontSize: isDesktop
+                                                        ? 19
+                                                        : isTablet
+                                                        ? 18
+                                                        : 16,
+
+                                                    fontWeight: FontWeight.w400,
+                                                    letterSpacing: -0.3,
+                                                    color: Colors.black,
+                                                  ),
                                                 ),
                                               ),
                                             ),
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
                                     ),
 
@@ -497,28 +688,110 @@ class _BookRideScreenState extends State<BookRideScreen> {
                                           : 40,
 
                                       child: ElevatedButton(
-                                        onPressed: () {
+                                        onPressed: _isBooking
+                                            ? null
+                                            : () async {
+                                          if (!isValidTrip) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(
+                                                content: Text("Please select valid pickup and destination locations."),
+                                                backgroundColor: Colors.red,
+                                              ),
+                                            );
+                                            return;
+                                          }
 
-                                          // API / NAVIGATION LATER
+                                          if (!isConfirmed) {
+                                            setState(() {
+                                              isConfirmed = true;
+                                            });
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(
+                                                content: Text("Pickup and drop verified! Tap 'Book Ride' to proceed."),
+                                                backgroundColor: Colors.green,
+                                              ),
+                                            );
+                                            return;
+                                          }
 
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (context) => const LocatingDriverScreen(),
-                                            ),
-                                          );
+                                          // Send booking request to Spring Boot backend
+                                          setState(() {
+                                            _isBooking = true;
+                                          });
 
-                                          debugPrint(
-                                            "Book Ride pressed",
-                                          );
+                                          try {
+                                            final result = await _rideService.bookRide(
+                                              pickupAddress: pickupAddress,
+                                              pickupLatitude: pickupLatitude!,
+                                              pickupLongitude: pickupLongitude!,
+                                              dropAddress: destinationAddress,
+                                              dropLatitude: destinationLatitude!,
+                                              dropLongitude: destinationLongitude!,
+                                            );
 
-                                          debugPrint(
-                                            "Pickup: $pickupAddress",
-                                          );
+                                            if (!mounted) return;
+                                            setState(() {
+                                              _isBooking = false;
+                                            });
 
-                                          debugPrint(
-                                            "Destination: $destinationAddress",
-                                          );
+                                            if (result['success'] == true) {
+                                              final nearbyDrivers = result['nearbyDriversCount'] ?? 0;
+                                              if (nearbyDrivers == 0) {
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  const SnackBar(
+                                                    content: Text("No nearby auto drivers available. Please try again later."),
+                                                    backgroundColor: Colors.orange,
+                                                    duration: Duration(seconds: 4),
+                                                  ),
+                                                );
+                                              } else {
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  SnackBar(
+                                                    content: Text("Ride booked! Found $nearbyDrivers nearby auto driver(s)."),
+                                                    backgroundColor: Colors.green,
+                                                  ),
+                                                );
+                                              }
+
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) => LocatingDriverScreen(
+                                                    rideId: result['rideId'] is int
+                                                        ? result['rideId']
+                                                        : int.tryParse(result['rideId']?.toString() ?? ''),
+                                                    pickupAddress: pickupAddress,
+                                                    pickupLatitude: pickupLatitude,
+                                                    pickupLongitude: pickupLongitude,
+                                                    dropAddress: destinationAddress,
+                                                    dropLatitude: destinationLatitude,
+                                                    dropLongitude: destinationLongitude,
+                                                    nearbyDriversCount: nearbyDrivers,
+                                                    initialSearchRadius: (result['searchRadiusMeters'] as num?)?.toDouble() ?? 500.0,
+                                                  ),
+                                                ),
+                                              );
+                                            } else {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(
+                                                  content: Text(result['message'] ?? "Failed to book ride"),
+                                                  backgroundColor: Colors.red,
+                                                ),
+                                              );
+                                            }
+                                          } catch (e) {
+                                            if (mounted) {
+                                              setState(() {
+                                                _isBooking = false;
+                                              });
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text("An error occurred while booking ride."),
+                                                  backgroundColor: Colors.red,
+                                                ),
+                                              );
+                                            }
+                                          }
                                         },
 
                                         style: ElevatedButton.styleFrom(
@@ -532,22 +805,31 @@ class _BookRideScreenState extends State<BookRideScreen> {
                                           ),
                                         ),
 
-                                        child: Text(
-                                          "Book Ride",
+                                        child: _isBooking
+                                            ? const SizedBox(
+                                                width: 22,
+                                                height: 22,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 2.5,
+                                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+                                                ),
+                                              )
+                                            : Text(
+                                                isConfirmed ? "Book Ride" : "Confirm",
 
-                                          style: TextStyle(
-                                            fontFamily: "InriaSerif",
-                                            fontSize: isDesktop
-                                                ? 21
-                                                : isTablet
-                                                ? 19
-                                                : 17,
+                                                style: TextStyle(
+                                                  fontFamily: "InriaSerif",
+                                                  fontSize: isDesktop
+                                                      ? 21
+                                                      : isTablet
+                                                      ? 19
+                                                      : 17,
 
-                                            fontWeight: FontWeight.w400,
-                                            letterSpacing: -0.3,
-                                            color: Colors.black,
-                                          ),
-                                        ),
+                                                  fontWeight: FontWeight.w400,
+                                                  letterSpacing: -0.3,
+                                                  color: Colors.black,
+                                                ),
+                                              ),
                                       ),
                                     ),
 
